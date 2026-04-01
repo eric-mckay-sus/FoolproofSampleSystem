@@ -7,7 +7,7 @@ using CsvHelper.Configuration;
 
 namespace UploadModelMappings;
 
-public class ModelInfo
+public record ModelInfo
 {
     [Name("INTERNAL_PART_#")]
     public string IcsNum { get; set; }

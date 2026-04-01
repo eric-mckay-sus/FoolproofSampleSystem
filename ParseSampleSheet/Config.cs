@@ -32,7 +32,7 @@ internal static class Config
 
     // Data columns to extract, specified by Excel letter (e.g. "A", "C", "F").
     // Leave the array empty to automatically extract all columns that have data.
-    public static string[] DataColumns    = ["A", "G", "AC", "AF", "BC"];
+    public static string[] DataColumns    = ["A", "G", "AC", "AF"];
 
     // Number of consecutive fully-empty rows before stopping to read the sheet.
     // Increase this if target data has intentional blank rows within it.

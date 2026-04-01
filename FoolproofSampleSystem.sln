@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UploadModelMappings", "Uplo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParseSampleSheet", "ParseSampleSheet\ParseSampleSheet.csproj", "{8404FF0A-3D04-47B7-A1B9-66A7FAFCDF2F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParseCondensedCSV", "ParseCondensedCSV\ParseCondensedCSV.csproj", "{4068962F-0504-4BBF-A480-C4C3A7B06ED6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{8404FF0A-3D04-47B7-A1B9-66A7FAFCDF2F}.Release|x64.Build.0 = Release|Any CPU
 		{8404FF0A-3D04-47B7-A1B9-66A7FAFCDF2F}.Release|x86.ActiveCfg = Release|Any CPU
 		{8404FF0A-3D04-47B7-A1B9-66A7FAFCDF2F}.Release|x86.Build.0 = Release|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Debug|x64.Build.0 = Debug|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Debug|x86.Build.0 = Debug|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Release|x64.ActiveCfg = Release|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Release|x64.Build.0 = Release|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Release|x86.ActiveCfg = Release|Any CPU
+		{4068962F-0504-4BBF-A480-C4C3A7B06ED6}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

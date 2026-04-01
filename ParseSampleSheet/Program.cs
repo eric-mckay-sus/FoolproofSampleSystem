@@ -283,6 +283,7 @@ public class Program
 
     /// <summary>
     /// Resolves the column indices specifically for the Global metadata section.
+    /// If none are provided, exclude this section
     /// </summary>
     static int[] ResolveGlobalColumns()
     {
