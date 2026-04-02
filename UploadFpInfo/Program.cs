@@ -75,9 +75,18 @@ public class UploadFoolproofToDb
             {
                 await ProcessSingleFile(file.FullName);
             }
+            catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
+            {
+                Match match = Regex.Match(ex.Message, @"The duplicate key value is \((.*?)\)");
+                string duplicateValue = match.Success
+                    ? $"({match.Groups[1].Value})"
+                    : "an entry in this file";
+
+                PrintInColor($"[DUPLICATE] Data identified by {duplicateValue} already exists. If you wish to update it, please do so manually. Otherwise, no action is required.", ConsoleColor.Cyan);
+            }
             catch (Exception ex)
             {
-                PrintInColor($"[SKIP] {file.Name}: {ex.Message}", ConsoleColor.Yellow);
+                PrintInColor($"[SKIP] {ex.Message}", ConsoleColor.Yellow);
             }
         }
     }
@@ -135,14 +144,19 @@ public class UploadFoolproofToDb
             dr["issueDate"] = IssueDate;
             dr["issuer"] = (object?)Issuer ?? DBNull.Value;
 
-            // Get the data for
+            // Get the data for this row
             dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
             dr["rank"] = GetCellText(row, colMap["RANK"]);
             dr["location"] = GetCellText(row, colMap["LOCATION"]);
-            dr["partMasterNum"] = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+            short? partMasterNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
 
-            dt.Rows.Add(dr);
-            rowsProcessed++;
+            // Only add (and count) the row if it has a part master associated with it (otherwise it is irrelevant for label making purposes)
+            if (partMasterNum != null)
+            {
+                dr["partMasterNum"] = partMasterNum;
+                dt.Rows.Add(dr);
+                rowsProcessed++;
+            }
             rowIndex++;
         }
 
@@ -215,13 +229,13 @@ public class UploadFoolproofToDb
     /// <summary>
     /// Get the part master number from an input string
     /// First tries to get a numeric value after the # character, but falls back to any number in the input
-    /// If neither work, defaults to DB null
+    /// If neither work, defaults to null (to denote this entry is irrelvant from a label-making standpoint)
     /// </summary>
     /// <param name="raw">The string to check for part master number</param>
     /// <returns>The part master number as a short, or DBNull if one does not exist</returns>
-    private static object ExtractPartNumber(string raw)
+    private static short? ExtractPartNumber(string raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return DBNull.Value;
+        if (string.IsNullOrWhiteSpace(raw)) return null;
 
         Match match = Regex.Match(raw, @"#(\d+)");
         if (match.Success && short.TryParse(match.Groups[1].Value, out short result))
@@ -231,7 +245,7 @@ public class UploadFoolproofToDb
         if (!string.IsNullOrEmpty(digits) && short.TryParse(digits, out short fallback))
             return fallback;
 
-        return DBNull.Value;
+        return null;
     }
 
     /// <summary>
