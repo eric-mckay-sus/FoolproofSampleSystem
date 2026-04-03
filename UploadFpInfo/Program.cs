@@ -23,22 +23,28 @@ public class UploadFoolproofToDb
         try
         {
             string path = args.Length > 0 ? args[0] : Config.InputLocation;
+            bool containsDuplicate = false;
+            bool containsMiscError = false;
+            string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
+            string miscErrorMessage = "One or more files contain invalid data. Scroll up to find out which file(s), and why.";
 
             if (Directory.Exists(path))
             {
                 Config.InputLocation = path;
+                (containsDuplicate, containsMiscError) = await RunBatch();
             }
             else if (File.Exists(path) && IsExcelFile(path))
             {
-                await ProcessSingleFile(path);
-                return;
+                (containsDuplicate, containsMiscError) = await ProcessSingleFile(path);
+                if (containsDuplicate) PrintInColor(duplicateMessage ,ConsoleColor.Cyan);
             }
             else
             {
                 PrintInColor($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).", ConsoleColor.Yellow);
             }
 
-            await RunBatch();
+            if (containsDuplicate) PrintInColor(duplicateMessage, ConsoleColor.Cyan);
+            if (containsMiscError) PrintInColor(miscErrorMessage, ConsoleColor.Yellow);
         }
         catch (Exception ex)
         {
@@ -49,9 +55,9 @@ public class UploadFoolproofToDb
     /// <summary>
     /// Process a batch of FP info files
     /// </summary>
-    /// <returns></returns>
+    /// <returns>Whether the batch contains a file with entries that would have duplicate PKs in the DB</returns>
     /// <exception cref="DirectoryNotFoundException">When the input location does not exist</exception>
-    private static async Task RunBatch()
+    private static async Task<(bool, bool)> RunBatch()
     {
         var inputDir = new DirectoryInfo(Config.InputLocation);
         if (!inputDir.Exists) throw new DirectoryNotFoundException(Config.InputLocation);
@@ -64,40 +70,40 @@ public class UploadFoolproofToDb
         if (files.Length == 0)
         {
             Console.WriteLine("No Excel files found.");
-            return;
+            return (false, false);
         }
 
         Console.WriteLine($"Found {files.Length} files. Starting upload to {Config.DbName}...");
 
+        bool currentContainsDuplicate = false;
+        bool currentContainsMisc = false;
+        bool batchContainsDuplicate = false;
+        bool batchContainsMisc = false;
         foreach (FileInfo file in files)
         {
             try
             {
-                await ProcessSingleFile(file.FullName);
-            }
-            catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-            {
-                Match match = Regex.Match(ex.Message, @"The duplicate key value is \((.*?)\)");
-                string duplicateValue = match.Success
-                    ? $"({match.Groups[1].Value})"
-                    : "an entry in this file";
+                (currentContainsDuplicate, currentContainsMisc) = await ProcessSingleFile(file.FullName);
 
-                PrintInColor($"[DUPLICATE] Data identified by {duplicateValue} already exists. If you wish to update it, please do so manually. Otherwise, no action is required.", ConsoleColor.Cyan);
+                // Assign batch & misc duplicate flag to current if it isn't already set (OR is short-circuiting so this is fast)
+                batchContainsDuplicate = batchContainsDuplicate || currentContainsDuplicate;
+                batchContainsMisc = batchContainsMisc || currentContainsMisc;
             }
             catch (Exception ex)
             {
                 PrintInColor($"[SKIP] {ex.Message}", ConsoleColor.Yellow);
             }
         }
+        return (batchContainsDuplicate, batchContainsMisc);
     }
 
     /// <summary>
     /// Process one FP info file
     /// </summary>
     /// <param name="excelPath">The path to the file to be processed</param>
-    /// <returns></returns>
+    /// <returns>A Task representing whether a would-be duplicate was encountered</returns>
     /// <exception cref="Exception">When the file does not have a sheet at the specified index</exception>
-    private static async Task ProcessSingleFile(string excelPath)
+    private static async Task<(bool, bool)> ProcessSingleFile(string excelPath)
     {
         Console.Write($"Processing {Path.GetFileName(excelPath)}... ");
 
@@ -124,52 +130,73 @@ public class UploadFoolproofToDb
         int rowIndex = Config.DataStartRow - 1;
         int emptyStreak = 0;
         int rowsProcessed = 0;
+        bool hasDuplicate = false;
+        bool hasMiscError = false;
 
-        while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
-        {
-            IRow row = sheet.GetRow(rowIndex);
-            if (IsRowEmpty(row))
+            while (rowIndex <= sheet.LastRowNum && emptyStreak < Config.EmptyRowLimit)
             {
-                emptyStreak++;
+                IRow row = sheet.GetRow(rowIndex);
+                if (IsRowEmpty(row))
+                {
+                    emptyStreak++;
+                    rowIndex++;
+                    continue;
+                }
+
+                emptyStreak = 0;
+
+                short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
+
+                // Only add (and count) the row if it has a dummy sample associated with it (otherwise it is irrelevant for label making purposes)
+                if (dummySampleNum != null)
+                {
+                    try
+                    {
+                        DataRow dr = dt.NewRow();
+
+                        // Assign metadata
+                        dr["model"] = Model;
+                        dr["revision"] = Revision;
+                        dr["issueDate"] = IssueDate;
+                        dr["issuer"] = (object?)Issuer ?? DBNull.Value;
+
+                        // Get the data for this row
+                        dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
+                        dr["rank"] = GetCellText(row, colMap["RANK"]);
+                        dr["location"] = GetCellText(row, colMap["LOCATION"]);
+                        dr["dummySampleNum"] = dummySampleNum;
+
+                        dt.Rows.Add(dr);
+                        await WriteSingleRowToDatabase(dr);
+                        rowsProcessed++;
+
+                    }
+                    catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
+                    {
+                        if (!hasDuplicate) Console.WriteLine();
+                        PrintInColor($"   [ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
+                        hasDuplicate = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (!hasMiscError) Console.WriteLine();
+                        PrintInColor($"   [ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
+                        hasMiscError = true;
+                    }
+                }
                 rowIndex++;
-                continue;
             }
-
-            emptyStreak = 0;
-            DataRow dr = dt.NewRow();
-
-            // Assign metadata
-            dr["model"] = Model;
-            dr["revision"] = Revision;
-            dr["issueDate"] = IssueDate;
-            dr["issuer"] = (object?)Issuer ?? DBNull.Value;
-
-            // Get the data for this row
-            dr["failureMode"] = GetCellText(row, colMap["PROCESS FAILURE MODE"]);
-            dr["rank"] = GetCellText(row, colMap["RANK"]);
-            dr["location"] = GetCellText(row, colMap["LOCATION"]);
-            short? partMasterNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
-
-            // Only add (and count) the row if it has a part master associated with it (otherwise it is irrelevant for label making purposes)
-            if (partMasterNum != null)
-            {
-                dr["partMasterNum"] = partMasterNum;
-                dt.Rows.Add(dr);
-                rowsProcessed++;
-            }
-            rowIndex++;
-        }
 
         // Bulk upload to SQL
-        if (dt.Rows.Count > 0)
+        if (rowsProcessed > 0)
         {
-            await WriteToDatabase(dt);
             Console.WriteLine($"Uploaded {rowsProcessed} rows.");
         }
         else
         {
-            Console.WriteLine("No data rows found.");
+            Console.WriteLine("No rows with valid data.");
         }
+        return (hasDuplicate, hasMiscError);
     }
 
     /// <summary>
@@ -249,21 +276,34 @@ public class UploadFoolproofToDb
     }
 
     /// <summary>
-    /// Asynchronously writes the input DataTable's contents to the FP info table
+    /// Asynchronously writes the input DataRow's contents to the FP info table
     /// </summary>
-    /// <param name="dt">The DataTable whose contents will be written to the server</param>
+    /// <param name="dr">The DataRow whose contents will be written to the server</param>
     /// <returns></returns>
-    private static async Task WriteToDatabase(DataTable dt)
+    private static async Task WriteSingleRowToDatabase(DataRow dr)
     {
         using var conn = new SqlConnection(Config.GetConnectionString());
         await conn.OpenAsync();
-        using var bulk = new SqlBulkCopy(conn);
-        bulk.DestinationTableName = "dbo.FoolproofInfo";
 
-        foreach (DataColumn col in dt.Columns)
-            bulk.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+        string sql = @"
+            INSERT INTO dbo.FoolproofInfo
+            (model, revision, issueDate, issuer, failureMode, rank, location, dummySampleNum)
+            VALUES
+            (@model, @revision, @issueDate, @issuer, @failureMode, @rank, @location, @dummySampleNum)";
 
-        await bulk.WriteToServerAsync(dt);
+        using var cmd = new SqlCommand(sql, conn);
+
+        // Mapping parameters from the DataRow
+        cmd.Parameters.AddWithValue("@model", dr["model"]);
+        cmd.Parameters.AddWithValue("@revision", dr["revision"]);
+        cmd.Parameters.AddWithValue("@issueDate", dr["issueDate"]);
+        cmd.Parameters.AddWithValue("@issuer", dr["issuer"]);
+        cmd.Parameters.AddWithValue("@failureMode", dr["failureMode"]);
+        cmd.Parameters.AddWithValue("@rank", dr["rank"]);
+        cmd.Parameters.AddWithValue("@location", dr["location"]);
+        cmd.Parameters.AddWithValue("@dummySampleNum", dr["dummySampleNum"]);
+
+        await cmd.ExecuteNonQueryAsync();
     }
 
     /// <summary>
@@ -281,20 +321,24 @@ public class UploadFoolproofToDb
     }
 
     /// <summary>
-    /// Constructs a DataTable mappable to the table on SQL Server
+    /// Constructs a DataTable mappable to the table on SQL Server.
+    /// The MaxLength attribute ensures no columns overflow before the server is contacted.
     /// </summary>
     /// <returns>A datatable compliant with the column names and datatypes in the FP table</returns>
     private static DataTable CreateFoolproofDataTable()
     {
-        DataTable dt = new();
-        dt.Columns.Add("model", typeof(string));
+        DataSet ds = new();
+        DataTable dt = ds.Tables.Add("FoolproofInfo");
+        dt.Columns.Add("model", typeof(string)).MaxLength = 32;
         dt.Columns.Add("revision", typeof(byte));
         dt.Columns.Add("issueDate", typeof(DateTime));
-        dt.Columns.Add("issuer", typeof(string));
-        dt.Columns.Add("failureMode", typeof(string));
-        dt.Columns.Add("rank", typeof(string));
-        dt.Columns.Add("location", typeof(string));
-        dt.Columns.Add("partMasterNum", typeof(short));
+        dt.Columns.Add("issuer", typeof(string)).MaxLength = 32;
+        dt.Columns.Add("failureMode", typeof(string)).MaxLength = 100;
+        dt.Columns.Add("rank", typeof(string)).MaxLength = 1;
+        dt.Columns.Add("location", typeof(string)).MaxLength = 32;
+        dt.Columns.Add("dummySampleNum", typeof(short));
+
+        ds.EnforceConstraints = true;
         return dt;
     }
 
