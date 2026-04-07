@@ -39,7 +39,7 @@ body {
     background-color: rgba(0,0,0,0.4);
     display: flex;
     align-items: center;
-    width: 250px;
+    width: 100%;
 }
 
 /* Header behavior */
@@ -55,7 +55,9 @@ body {
 .header-brand {
     color: white;
     text-decoration: none;
-    font-size: 1.5rem;
+    line-height: 1;
+    margin: 0;
+    font-size: 1.4rem;
     white-space: nowrap;
     opacity: 0; /* Hidden when collapsed */
     transition: opacity 0.2s ease;

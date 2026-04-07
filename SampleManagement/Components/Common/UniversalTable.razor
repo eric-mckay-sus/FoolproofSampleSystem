@@ -11,7 +11,7 @@
             <div class="d-flex align-items-center me-3">
                 <span class="text-muted me-2">Rows:</span>
                 <select class="form-select form-select-sm" style="width:auto"
-                        @onchange="async (e) => await OnPageSizeChange.InvokeAsync(int.Parse(e.Value.ToString()))">
+                        @onchange="async (e) => await OnPageSizeChange.InvokeAsync(int.TryParse(e.Value?.ToString(), out int i) ? i : 25)">
                     <option value="10" selected="@(PageSize == 10)">10</option>
                     <option value="25" selected="@(PageSize == 25)">25</option>
                     <option value="50" selected="@(PageSize == 50)">50</option>
@@ -122,7 +122,7 @@
     }
 
     // A cache of the properties of T so it's not invoked for each header, excluding those marked NotDisplayed
-    private PropertyInfo[] _cachedProps = typeof(T).GetProperties().ToArray();
+    private PropertyInfo[] _cachedProps = typeof(T).GetProperties().Where(p => p.GetCustomAttribute<NotDisplayedAttribute>() == null).ToArray();
 
     // Sorting & staleness
     [Parameter] public EventCallback<string> OnSort { get; set; } // Handles everything related to sorting

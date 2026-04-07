@@ -1,0 +1,267 @@
+﻿@page "/"
+@inject FPSampleDbContext DbContext
+@inject IDbContextFactory<FPSampleDbContext> DbFactory
+
+<PageTitle>Create New Sample</PageTitle>
+
+<h2>Create & View Samples</h2>
+
+<div class="expandable-container">
+    <div class="expandable-wrapper @(_isFormExpanded ? "is-expanded" : "")">
+        <div class="expandable-content">
+            <div class="form-card">
+                <EditForm Model="@_formData" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Model</label>
+                            <input list="models" @bind-value="_formData.Model" @bind-value:after="RefreshFilters"
+                                class="form-control" placeholder="Pick a model first to only see lines that run it..." />
+                            <datalist id="models">
+                                @foreach (string m in _availableModels)
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </datalist>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Line Name</label>
+                            <input list="lines" @bind-value="_formData.WorkCenterCode" @bind-value:after="RefreshFilters"
+                                class="form-control" placeholder="...or pick a line first to only see the models that it runs" />
+                            <datalist id="lines">
+                                @foreach (string l in _availableLines)
+                                {
+                                    <option value="@l">@l</option>
+                                }
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label class="form-label">Dummy Sample #</label>
+                            <select @bind="_formData.DummySampleNum" class="form-select form-control" disabled=@_notReadyForSampleNum>
+                                <option value="0">@(_notReadyForSampleNum ? "Please enter model and line first" : "-- Select --")</option>
+                                @foreach (short num in _availableSampleNums)
+                                {
+                                    <option value="@num">@num</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label">Associate Signature</label>
+                            <input @bind="_formData.CreatorName" class="form-control"
+                                    placeholder=@(_notReadyForSignature ? "Please enter model, line, and dummy sample # first" : "Enter the name on your badge")
+                                    disabled=@_notReadyForSignature />
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="alert alert-danger py-2 mt-2">@_errorMessage</div>
+                    }
+
+                    <div class="form-actions d-flex justify-content-center align-items-center">
+                        <button type="button" class="btn btn-outline-secondary btn-lg me-2" @onclick="CloseForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-lg px-4">
+                            <i class="bi bi-plus-lg"></i> Save Sample
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="expandable-wrapper @(!_isFormExpanded ? "is-expanded" : "")">
+        <div class="expandable-content centered-container">
+            <button class="btn btn-success" @onclick="() => { _isFormExpanded=true; Console.WriteLine(_formData.Model); }">
+                <Icon Name="IconName.PencilSquare" /> Create New Sample
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    @if (_sampleData.Any())
+    {
+        <div class="table-container">
+        <UniversalTable T="Sample"
+                        Items="_sampleData"
+                        TotalCount="_sampleData.Count()"
+                        PageSize="_sampleData.Count()"
+                        CurrentPage="1"
+                        TotalPages="1" />
+        </div>
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No samples registered yet.</p>
+        </div>
+    }
+</div>
+
+@code {
+    // Keep master lists to reset from
+    private List<ModelLine> _allMappings = new();
+
+    private IEnumerable<Sample> _sampleData = [];
+    private SampleFormData _formData = new();
+
+    // Filtered lists to use for autofill
+    private IList<string> _availableModels = new List<string>();
+    private IList<string> _availableLines = new List<string>();
+    private IList<short> _availableSampleNums = new List<short>();
+
+    // UI properties
+    private bool _isFormExpanded = false; // Controls collapsibility
+    private string? _errorMessage;
+    private bool _notReadyForSampleNum =>
+        string.IsNullOrWhiteSpace(_formData.Model) ||
+        string.IsNullOrWhiteSpace(_formData.WorkCenterCode);
+    private bool _notReadyForSignature =>
+        _notReadyForSampleNum ||
+        _formData.DummySampleNum < 1;
+
+    /// <summary>
+    /// When the app starts, load the sample list
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    /// <summary>
+    /// Resets the filters and fetches the sample table
+    /// </summary>
+    /// <returns></returns>
+    private async Task LoadData()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        // Fetch the mapping table once to handle bidirectional filtering in memory
+        _allMappings = await context.ModelToLine.ToListAsync();
+
+        // Initialize the UI lists with everything
+        _availableModels = _allMappings.Select(m => m.ShortDescription).Distinct().ToList();
+        _availableLines = _allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
+
+        _sampleData = await DbContext.Samples.AsNoTracking().ToListAsync();
+    }
+
+    /// <summary>
+    /// Filters the autofill lists based on what fields in the add form have values
+    /// </summary>
+    /// <returns></returns>
+    private async Task RefreshFilters()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        // Normalize inputs to handle casing and extra whitespace
+        string searchModel = _formData.Model.Trim();
+        string searchLine = _formData.WorkCenterCode.Trim();
+
+        bool hasModel = !string.IsNullOrEmpty(searchModel);
+        bool hasLine = !string.IsNullOrEmpty(searchLine);
+
+        // If line is selected, use it for filtering
+        if (hasLine && !hasModel)
+        {
+            _availableModels = _allMappings
+                .Where(x => x.WorkCenterCode == _formData.WorkCenterCode)
+                .Select(x => x.ShortDescription)
+                .OrderBy(x => x)
+                .Distinct().ToList();
+        }
+        // Otherwise clear the line filter
+        else if (!hasLine && !hasModel)
+            _availableModels = _allMappings.Select(m => m.ShortDescription).Distinct().ToList();
+
+        // If model is selected, use it for filtering
+        if (hasModel && !hasLine)
+        {
+            _availableLines = _allMappings
+                .Where(x => x.ShortDescription == _formData.Model)
+                .Select(x => x.WorkCenterCode)
+                .OrderBy(x => x)
+                .Distinct().ToList();
+        }
+        // Otherwise clear the model filter
+        else if (!hasLine && !hasModel)
+            _availableLines = _allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
+
+        // Update sample numbers when model is selected
+        if (hasModel)
+        {
+            _availableSampleNums = await context.FoolproofInfo
+                .Where(f => f.Model == _formData.Model)
+                .Select(f => f.DummySampleNum)
+                .OrderBy(x => x)
+                .Distinct().ToListAsync();
+        }
+        else
+        {
+            _availableSampleNums.Clear();
+            _formData.DummySampleNum = 0;
+        }
+    }
+
+    /// <summary>
+    /// Remove add form flag, clear input, error message and autofill list filters
+    /// </summary>
+    protected void CloseForm()
+    {
+        _isFormExpanded = false;
+        _formData = new();
+        _errorMessage = null;
+
+        // Reload available lists
+        _availableModels = _allMappings.Select(m => m.ShortDescription).Distinct().ToList();
+        _availableLines = _allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Attempts to run the stored procedure with the current form input, populating error message as necessary
+    /// </summary>
+    /// <returns></returns>
+    private async Task HandleSubmit()
+    {
+        _errorMessage = null; // Ensure any error messages are for this submission
+
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+
+            // ExecuteSqlInterpolatedAsync internally wraps each parameter in an injection-safe DbParameter
+            await context.Database.ExecuteSqlInterpolatedAsync($@"
+                EXEC [dbo].[CreateSample]
+                    @model = {_formData.Model},
+                    @workCenterCode = {_formData.WorkCenterCode},
+                    @dummySampleNum = {_formData.DummySampleNum},
+                    @creatorName = {_formData.CreatorName}");
+
+            _formData = new(); // Reset form
+            await LoadData();
+            _isFormExpanded = false; // Auto-collapse on success to show the table
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Database Error: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Represents the data enclosed in the sample addition form
+    /// </summary>
+    public record SampleFormData
+    {
+        public string Model { get; set; } = string.Empty;
+        public string WorkCenterCode { get; set; } = string.Empty;
+        public short DummySampleNum { get; set; } = 0;
+        public string CreatorName { get; set; } = string.Empty;
+    }
+}

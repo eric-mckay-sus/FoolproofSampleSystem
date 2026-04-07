@@ -1,5 +1,5 @@
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: "Segoe UI", sans-serif, 'Helvetica Neue', Helvetica, Arial;
 }
 
 a, .btn-link {
@@ -8,8 +8,12 @@ a, .btn-link {
 
 .btn-primary {
     color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    background-color: hsl(210, 76%, 40%) !important;
+    border-color: hsl(210, 76%, 35%) !important;
+}
+
+.btn-primary:hover {
+    background-color: hsl(210, 76%, 45%) !important;
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
@@ -63,10 +67,12 @@ h1:focus {
     background-image: url('favicon.svg');
     background-size: contain; /* Ensures the image fits within the element size */
     background-repeat: no-repeat;
-    width: 1.5rem; /* Define size */
-    height: 1.5rem; /* Define size */
+    background-position: center;
+    width: 1.6rem; /* Define size */
+    height: 1.6rem; /* Define size */
     display: inline-block; /* Aligns with text if used inline */
     flex-shrink: 0;
+    transform: translate(-2px, -2px); /* The Stanley 'S' has more weight at the lower right, so shift it up and left to make it look nice */
 }
 
 .centered-container{
@@ -164,4 +170,86 @@ h1:focus {
     margin-bottom: 1rem;
     container-type: inline-size;
     container-name: table-container;
+}
+
+/* Container for the form to give it a 'Sheet' look */
+.form-card {
+    background: #ffffff;
+    padding: 1.5rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.form-title {
+    color: #4a5568;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid #f7fafc;
+    padding-bottom: 0.5rem;
+}
+
+/* Make labels look professional */
+.form-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #718096;
+    margin-bottom: 0.4rem;
+}
+
+/* Style the Inputs */
+.form-control {
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus {
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.2);
+}
+
+/* Button Alignment */
+.form-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid #edf2f7;
+    padding-top: 1rem;
+}
+
+/* The accordion wrapper (compressed by default) */
+.expandable-wrapper {
+    display: grid;
+    grid-template-rows: 0fr; /* Start collapsed */
+    transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s ease,
+                visibility 0.2s;
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden;
+}
+
+/* When collapsing (fade out immediately) */
+.expandable-wrapper:not(.is-expanded) {
+    transition:
+        grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s,
+        opacity 0.2s ease 0s;
+}
+
+/* Expands the wrapper to the size of its contents */
+.is-expanded {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+    /* Delay the opacity so it starts halfway through the height expansion */
+    transition-delay: 0s, 0.2s, 0s;
+}
+
+/* Describes the contents of the accordion */
+.expandable-content {
+    min-height: 0;
+    padding-bottom: 10px;
 }
