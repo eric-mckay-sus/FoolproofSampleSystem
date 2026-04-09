@@ -8,48 +8,87 @@ using NPOI.XSSF.UserModel;
 
 namespace UploadFpInfo;
 
+public enum ReportLevel{ INFO, IMPORTANT, WARNING, ERROR, SUCCESS }
+
+public record Report(string Message, ReportLevel Level);
+
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
 /// The model to line database must be populated for insertion validation to succeed
 /// </summary>
-public class UploadFoolproofToDb
+public class FPSheetUploader(IProgress<Report>? progress)
 {
+    public IProgress<Report>? Progress = progress;
+
     /// <summary>
-    /// Main entry point: detect input location argument and delegate to file/batch handler based on whether input location is file or folder
+    /// Main entry point: detect input location argument, initialize Progress to print to console, and
+    /// delegate to file/batch handler based on whether input location is file or folder
     /// </summary>
     /// <param name="args">Command line arguments, accepts 0-1</param>
     /// <returns></returns>
     public static async Task Main(string[] args)
     {
+        // Initialize the progress manager to print to console
+        Progress<Report> consoleProgress = new(report =>
+        {
+            // Map levels to colors
+            Console.ForegroundColor = report.Level switch
+            {
+                ReportLevel.ERROR     => ConsoleColor.Red,
+                ReportLevel.SUCCESS   => ConsoleColor.Green,
+                ReportLevel.WARNING   => ConsoleColor.Yellow,
+                ReportLevel.IMPORTANT => ConsoleColor.DarkCyan,
+                _                     => ConsoleColor.White
+            };
+
+            Console.WriteLine(report.Message);
+            Console.ResetColor();
+        });
+
+        // If there was an input location argument, pass it along
+        string? potentialFile = null;
+        if (args.Length > 0) potentialFile = args[0];
+
+        // Exit static by creating an uploader
+        FPSheetUploader uploader = new(consoleProgress);
+
+        // Defaults to the input location in config
+        await uploader.ExecuteAsync(potentialFile);
+    }
+
+    public async Task ExecuteAsync(string? filename)
+    {
+        string path = filename ?? string.Empty;
+        bool containsDuplicate = false;
+        bool containsMiscError = false;
+        string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
+        string miscErrorMessage = "One or more files contain invalid data. Scroll up to find out which file(s), and why.";
+
         try
         {
-            string path = args.Length > 0 ? args[0] : Config.InputLocation;
-            bool containsDuplicate = false;
-            bool containsMiscError = false;
-            string duplicateMessage = "One or more files contain duplicate entries. If you wish to update, please do so manually. Otherwise, no action is required.";
-            string miscErrorMessage = "One or more files contain invalid data. Scroll up to find out which file(s), and why.";
-
-            if (Directory.Exists(path))
+            if (!Path.Exists(path))
             {
-                Config.InputLocation = path;
-                (containsDuplicate, containsMiscError) = await RunBatch();
+                Report($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).\n", ReportLevel.WARNING);
+            }
+            else if (Directory.Exists(path))
+            {
+                (containsDuplicate, containsMiscError) = await RunBatch(path);
             }
             else if (File.Exists(path) && IsExcelFile(path))
             {
                 (containsDuplicate, containsMiscError) = await ProcessFile(path);
-                if (containsDuplicate) PrintInColor(duplicateMessage ,ConsoleColor.Cyan);
             }
             else
             {
-                PrintInColor($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).", ConsoleColor.Yellow);
+                Report($"Could not find {path}. Please verify the path is correct, then try again.");
             }
 
-            if (containsDuplicate) PrintInColor(duplicateMessage, ConsoleColor.Cyan);
-            if (containsMiscError) PrintInColor(miscErrorMessage, ConsoleColor.Yellow);
+            if (containsDuplicate) Report(duplicateMessage, ReportLevel.IMPORTANT);
+            if (containsMiscError) Report(miscErrorMessage, ReportLevel.WARNING);
         }
         catch (Exception ex)
         {
-            PrintInColor($"Fatal error: {ex.Message}", ConsoleColor.Red);
+            Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
         }
     }
 
@@ -58,10 +97,9 @@ public class UploadFoolproofToDb
     /// </summary>
     /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error</returns>
     /// <exception cref="DirectoryNotFoundException">When the input location does not exist</exception>
-    private static async Task<(bool, bool)> RunBatch()
+    private async Task<(bool, bool)> RunBatch(string directoryPath)
     {
-        var inputDir = new DirectoryInfo(Config.InputLocation);
-        if (!inputDir.Exists) throw new DirectoryNotFoundException(Config.InputLocation);
+        DirectoryInfo inputDir = new(directoryPath);
 
         FileInfo[] files = inputDir.GetFiles("*.xlsx")
                             .Concat(inputDir.GetFiles("*.xls"))
@@ -70,11 +108,11 @@ public class UploadFoolproofToDb
 
         if (files.Length == 0)
         {
-            Console.WriteLine("No Excel files found.");
+            Report("No Excel files found.", ReportLevel.ERROR);
             return (false, false);
         }
 
-        Console.WriteLine($"Found {files.Length} files. Starting upload to {Config.DbName}...");
+        Report($"Found {files.Length} files. Starting upload to {Config.DbName}...");
 
         bool currentContainsDuplicate = false;
         bool currentContainsMisc = false;
@@ -92,7 +130,8 @@ public class UploadFoolproofToDb
             }
             catch (Exception ex)
             {
-                PrintInColor($"[SKIP] {ex.Message}", ConsoleColor.Yellow);
+                Report($"[SKIP] {ex.Message}", ReportLevel.WARNING);
+                batchContainsMisc=true;
             }
         }
         return (batchContainsDuplicate, batchContainsMisc);
@@ -104,11 +143,11 @@ public class UploadFoolproofToDb
     /// <param name="excelPath">The path to the file to be processed</param>
     /// <returns>A Task with a duplicate flag and a miscellaneous error flag</returns>
     /// <exception cref="Exception">When the file does not have a sheet at the specified index</exception>
-    private static async Task<(bool, bool)> ProcessFile(string excelPath)
+    private async Task<(bool, bool)> ProcessFile(string excelPath)
     {
         // Load Excel file
         IWorkbook workbook;
-        using (var fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (FileStream fs = new(excelPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
         {
             workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)
                 ? new XSSFWorkbook(fs)
@@ -124,49 +163,16 @@ public class UploadFoolproofToDb
         // Get column indices associated with column names
         Dictionary<string, int> colMap = MapHeaderIndices(sheet);
 
-        // Initialize flags for file processing loop
+        // Initialize flags for error detection and intention to repeat
         bool hasDuplicate = false;
         bool hasMiscError = false;
         bool applyAnotherFilter = false;
 
+        // Start the loop for applying multiple filters (run at least once)
         do
         {
-            // Get and validate a model to which this file is to be associated
-            Console.Write($"Please enter the C. Core model name for the contents of ");
-            PrintInColor(Path.GetFileName(excelPath), ConsoleColor.DarkCyan, false);
-            Console.WriteLine(" to be imported:");
-            bool isValidModel;
-            string model;
-            do // Use a do-while loop to get data and try again on failure
-            {
-                model = Console.ReadLine()?.Trim() ?? string.Empty;
-                isValidModel = await ValidateModel(model);
-                if (isValidModel)
-                    RewriteInColor(model, ConsoleColor.Green);
-                else {
-                    RewriteInColor(model, ConsoleColor.Red);
-                    Console.WriteLine($"{model} is not a model in the model to line database. Please enter a different model name:");
-                }
-            } while (!isValidModel);
-
-            Console.WriteLine($"Enter target Excel column name from BM to CJ, or just ENTER to proceed without a filter:");
-
-            bool isFiltering;
-            int targetColIndex;
-            do
-            {
-                string filterColumnName = Console.ReadLine() ?? string.Empty;
-                targetColIndex = ColumnIndex(filterColumnName);
-                isFiltering = true;
-                if(targetColIndex < 64 || targetColIndex > 87)
-                {
-                    if (targetColIndex != -1) {
-                        RewriteInColor(filterColumnName, ConsoleColor.Red);
-                        Console.WriteLine($"{filterColumnName} is outside the valid range of BM-CJ. Please enter a different column name (or just press ENTER to add no filter):");
-                    }
-                    isFiltering = false;
-                }
-            } while(!(targetColIndex == -1 || isFiltering));
+            (string Model, bool IsFiltering, int targetColIndex) = await CollectUserInput(excelPath);
+            if (Model.Equals("SKIP", StringComparison.OrdinalIgnoreCase)) return (hasDuplicate, hasMiscError);
 
             // Initialize DataTable for rows
             DataTable dt = CreateFoolproofDataTable();
@@ -190,7 +196,7 @@ public class UploadFoolproofToDb
                 short? dummySampleNum = ExtractPartNumber(GetCellText(row, colMap["DUMMY SAMPLE REQUIRED?"]));
 
                 bool passesFilter = true; // denotes that the current row either fulfills the filter or there is no filter to fulfill
-                if (isFiltering)
+                if (IsFiltering)
                 {
                     string filterCellValue = GetCellText(row, targetColIndex);
                     if (string.IsNullOrWhiteSpace(filterCellValue))
@@ -207,7 +213,7 @@ public class UploadFoolproofToDb
                         DataRow dr = dt.NewRow();
 
                         // Assign metadata
-                        dr["model"] = model;
+                        dr["model"] = Model;
                         dr["revision"] = Revision;
                         dr["issueDate"] = IssueDate;
                         dr["issuer"] = (object?)Issuer ?? DBNull.Value;
@@ -225,14 +231,14 @@ public class UploadFoolproofToDb
                     }
                     catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
                     {
-                        if (!hasDuplicate) Console.WriteLine();
-                        PrintInColor($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {model} for dummy sample #{dummySampleNum}", ConsoleColor.Cyan);
+                        if (!hasDuplicate) Report("\n");
+                        Report($"\t[ROW SKIP] Data at row {rowIndex + 1} matches existing rev {Revision} data for {Model} for dummy sample #{dummySampleNum}", ReportLevel.IMPORTANT);
                         hasDuplicate = true;
                     }
                     catch (Exception ex)
                     {
-                        if (!hasMiscError) Console.WriteLine();
-                        PrintInColor($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ConsoleColor.Yellow);
+                        if (!hasMiscError) Report("\n");
+                        Report($"\t[ROW SKIP] Error at row {rowIndex + 1}: {ex.Message}", ReportLevel.WARNING);
                         hasMiscError = true;
                     }
                 }
@@ -240,11 +246,11 @@ public class UploadFoolproofToDb
             }
 
             // Report parse success/failure
-            ShowPreview(dt, rowsProcessed);
+            if (Progress != null) ShowPreview(dt, rowsProcessed);
 
-            if (isFiltering)
+            if (IsFiltering)
             {
-                Console.Write($"\nWould you like to apply another filter to this same file/reuse this file's contents for another model? (y/n): ");
+                Report($"\nWould you like to apply another filter to this same file/reuse this file's contents for another model? (y/n): ");
                 string response = Console.ReadLine()?.Trim().ToLower() ?? "";
                 applyAnotherFilter = response == "y" || response == "yes";
             }
@@ -254,20 +260,83 @@ public class UploadFoolproofToDb
         return (hasDuplicate, hasMiscError);
     }
 
+    private async Task<(string, bool, int)> CollectUserInput(string excelPath)
+    {
+        string model;
+        bool isFiltering = false;
+        int targetColIndex = -1;
+
+        // Get and validate a model to which this file is to be associated
+        while (true)
+        {
+            Report($"Please enter the C. Core model name for the contents of ");
+            Report(Path.GetFileName(excelPath), ReportLevel.IMPORTANT);
+            Report(" to be imported (or type 'SKIP' to proceed to the next file):\n");
+
+            bool isValidModel;
+            do // Use a do-while loop to get model data and try again on failure
+            {
+                model = Console.ReadLine()?.Trim() ?? string.Empty;
+                if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
+                {
+                    Report($"Skipping file: {Path.GetFileName(excelPath)}", ReportLevel.WARNING);
+                    return (model, isFiltering, targetColIndex);
+                }
+                isValidModel = await ValidateModel(model);
+                if (!isValidModel)
+                    Report($"{model} is not a model in the model to line database. Please enter a different model name (or 'SKIP'):\n", ReportLevel.WARNING);
+            } while (!isValidModel);
+
+            Report($"Enter target Excel column name from BM to CJ, 'R' to re-enter model name, or just ENTER to proceed without a filter:\n");
+            bool restartRequested = false;
+
+            do
+            {
+                string filterColumnName = Console.ReadLine()?.Trim() ?? string.Empty;
+                if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
+                {
+                    Report("Returning to model specification for this file...\n", ReportLevel.IMPORTANT);
+                    restartRequested = true; // Throw flag so outer loop knows to try again
+                    break; // Only breaks the inner loop
+                }
+
+                targetColIndex = ColumnIndex(filterColumnName);
+                isFiltering = true;
+
+                if(targetColIndex < 64 || targetColIndex > 87)
+                {
+                    if (targetColIndex != -1) {
+                        Report($"{filterColumnName} is outside the valid range. Please enter a column name from BM-CJ, 'R' to re-enter model name, or ENTER to add no filter):\n", ReportLevel.WARNING);
+                    }
+                    isFiltering = false;
+                }
+            } while(!(targetColIndex == -1 || isFiltering));
+
+            // Exit the loop if if
+            if (!restartRequested) break;
+        }
+        return (model, isFiltering, targetColIndex);
+    }
+
     /// <summary>
     /// Prints the contents of <paramref name="dt"/> to the console
     /// </summary>
     /// <param name="dt">The DataTable to display</param>
     /// <param name="rowsProcessed">The number of rows processed</param>
-    public static void ShowPreview(DataTable dt, int rowsProcessed)
+    public void ShowPreview(DataTable dt, int rowsProcessed)
     {
+        // If there's nothing to print to, skip the preview entirely
+        if (Progress==null) return;
+
+        System.Text.StringBuilder sb = new();
+
         if(rowsProcessed == 0){
-            PrintInColor("No rows with valid data (under current filters).", ConsoleColor.DarkYellow);
+            Report("No rows with valid data (under current filters).", ReportLevel.WARNING);
             return;
         }
 
-        Console.WriteLine();
-        PrintInColor($"--- UPLOAD SUMMARY: {rowsProcessed} ROWS PROCESSED ---", ConsoleColor.Green);
+        Report("\n");
+        Report($"--- UPLOAD SUMMARY: {rowsProcessed} ROWS PROCESSED ---", ReportLevel.SUCCESS);
 
         // Define column widths for the ASCII table
         int modelWidth = 15;
@@ -279,9 +348,9 @@ public class UploadFoolproofToDb
         string header = $"| {"Model".PadRight(modelWidth)} | {"Failure Mode".PadRight(modeWidth)} | {"Loc".PadRight(locWidth)} | {"Dummy #".PadRight(dummyWidth)} |";
         string divider = new('-', header.Length);
 
-        Console.WriteLine(divider);
-        Console.WriteLine(header);
-        Console.WriteLine(divider);
+        Report(divider);
+        Report(header);
+        Report(divider);
 
         // Print each row from the DataTable
         foreach (DataRow row in dt.Rows)
@@ -300,10 +369,10 @@ public class UploadFoolproofToDb
 
             string dummyStr = row["dummySampleNum"]?.ToString() ?? "";
 
-            Console.WriteLine($"| {modelStr.PadRight(modelWidth)} | {modeStr.PadRight(modeWidth)} | {locStr.PadRight(locWidth)} | {dummyStr.PadRight(dummyWidth)} |");
+            Report($"| {modelStr.PadRight(modelWidth)} | {modeStr.PadRight(modeWidth)} | {locStr.PadRight(locWidth)} | {dummyStr.PadRight(dummyWidth)} |");
         }
 
-        Console.WriteLine(divider);
+        Report(divider);
     }
 
     /// <summary>
@@ -315,14 +384,14 @@ public class UploadFoolproofToDb
     {
         if(string.IsNullOrWhiteSpace(toValidate)) return false;
 
-        using var conn = new SqlConnection(Config.GetConnectionString());
+        using SqlConnection conn = new(Config.GetConnectionString());
         await conn.OpenAsync();
 
         string sql = @"
             SELECT COUNT(*) FROM dbo.ModelToLine
                    WHERE shortDesc LIKE @model";
 
-        using var cmd = new SqlCommand(sql, conn);
+        using SqlCommand cmd = new(sql, conn);
         cmd.Parameters.AddWithValue("@model", toValidate);
 
         int count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
@@ -365,7 +434,7 @@ public class UploadFoolproofToDb
     /// <returns>The dictionary mapping header names to header indices</returns>
     private static Dictionary<string, int> MapHeaderIndices(ISheet sheet)
     {
-        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
         IRow headerRow = sheet.GetRow(Config.DataHeaderRow - 1);
 
         // Required target columns
@@ -410,7 +479,7 @@ public class UploadFoolproofToDb
     /// <returns></returns>
     private static async Task WriteRowToDatabase(DataRow dr)
     {
-        using var conn = new SqlConnection(Config.GetConnectionString());
+        using SqlConnection conn = new(Config.GetConnectionString());
         await conn.OpenAsync();
 
         string sql = @"
@@ -419,7 +488,7 @@ public class UploadFoolproofToDb
             VALUES
             (@model, @revision, @issueDate, @issuer, @failureMode, @rank, @location, @dummySampleNum)";
 
-        using var cmd = new SqlCommand(sql, conn);
+        using SqlCommand cmd = new(sql, conn);
 
         // Mapping parameters from the DataRow
         cmd.Parameters.AddWithValue("@model", dr["model"]);
@@ -544,26 +613,10 @@ public class UploadFoolproofToDb
         path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Prints <paramref name="msg"/> in the specified <paramref name="color"/>
+    /// Updates the progress monitor with a new message and 'level'
+    /// The message level is just metadata to be handled by the receiver
     /// </summary>
-    /// <param name="msg">The text to be printed</param>
-    /// <param name="color">The color in which to print</param>
-    private static void PrintInColor(string msg, ConsoleColor color, bool withNewLine=true)
-    {
-        Console.ForegroundColor = color;
-        if (withNewLine) Console.WriteLine(msg);
-        else Console.Write(msg);
-        Console.ResetColor();
-    }
-
-    /// <summary>
-    /// Overwrites the console contents on the last line with <paramref name="msg"/> in the specified <paramref name="color"/>.
-    /// </summary>
-    /// <param name="msg"></param>
-    /// <param name="color"></param>
-    private static void RewriteInColor(string msg, ConsoleColor color)
-    {
-        Console.SetCursorPosition(0, Console.CursorTop-1);
-        PrintInColor(msg, color);
-    }
+    /// <param name="msg">The message to report</param>
+    /// <param name="level">The report level</param>
+    private void Report(string msg, ReportLevel level = ReportLevel.INFO) => Progress?.Report(new(msg,level));
 }
