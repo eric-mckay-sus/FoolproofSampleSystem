@@ -1,5 +1,11 @@
+// <copyright file="ConsoleExtensions.cs" company="Stanley Electric US Co. Inc.">
+// Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
+// </copyright>
 namespace UploadFpInfo;
 
+/// <summary>
+/// Holds all extension methods applicable to reports to the console.
+/// </summary>
 public static class ReportConsoleExtensions
 {
     /// <summary>
@@ -10,15 +16,15 @@ public static class ReportConsoleExtensions
     /// <returns>A new string enclosed in the appropriate ANSI codes for terminal rendering.</returns>
     public static string ToAnsiString(this Report report)
     {
-        string colorCode = report.Level switch
+        string colorCode = report.level switch
         {
-            ReportLevel.ERROR     => "\u001b[31m", // Red
-            ReportLevel.SUCCESS   => "\u001b[32m", // Green
-            ReportLevel.WARNING   => "\u001b[33m", // Yellow
+            ReportLevel.ERROR => "\u001b[31m", // Red
+            ReportLevel.SUCCESS => "\u001b[32m", // Green
+            ReportLevel.WARNING => "\u001b[33m", // Yellow
             ReportLevel.IMPORTANT => "\u001b[36m", // Cyan
-            _                     => "\u001b[37m"  // White
+            _ => "\u001b[37m" // White
         };
         const string resetCode = "\u001b[0m";
-        return $"{colorCode}{report.Message}{resetCode}";
+        return $"{colorCode}{report.message}{resetCode}";
     }
 }
