@@ -100,7 +100,7 @@ public class FPSheetUploader
         {
             if (!Path.Exists(path))
             {
-                await this.Report($"Path '{path}' is not a valid directory or Excel file. Using Config default ({path}).\n", ReportLevel.WARNING);
+                await this.Report($"Path '{filename}' is not a valid directory or Excel file. Using Config default ({path}).\n", ReportLevel.WARNING);
             }
             else if (Directory.Exists(path))
             {

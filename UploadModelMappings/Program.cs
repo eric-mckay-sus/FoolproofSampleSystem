@@ -148,11 +148,11 @@ public class ModelMappingUploader
         {
             if (Directory.Exists(path))
             {
-                await this.Report($"Path '{path}' is a directory, which is not supported by this uploader. Using Config default ({path}).\n", ReportLevel.WARNING);
+                await this.Report($"Path '{filename}' is a directory, which is not supported by this uploader. Using Config default ({path}).\n", ReportLevel.WARNING);
             }
             else if (!File.Exists(path))
             {
-                await this.Report($"Path '{path}' could not be found. Using Config default ({path}).\n", ReportLevel.WARNING);
+                await this.Report($"Path '{filename}' could not be found. Using Config default ({path}).\n", ReportLevel.WARNING);
             }
             else if (!Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase))
             {
@@ -180,7 +180,7 @@ public class ModelMappingUploader
     /// Uploads the CSV file at filepath to the database.
     /// </summary>
     /// <param name="filepath">The path of the CSV to upload.</param>
-    /// <param name="connectionString">The DB conneciton string.</param>
+    /// <param name="connectionString">The DB connection string.</param>
     private async Task Upload(string filepath, string connectionString)
     {
         // The layers of wrapping are kind of disgusting, but we need an open StreamReader to create a CsvReader
