@@ -1,10 +1,9 @@
 ﻿@page "/"
-@inject FPSampleDbContext DbContext
-@inject IDbContextFactory<FPSampleDbContext> DbFactory
+@inherits TableManager<Sample>
 
 <PageTitle>Create New Sample</PageTitle>
 
-<h2>Create & View Samples</h2>
+<h2>Create & Print Samples</h2>
 
 <div class="expandable-container">
     <div class="expandable-wrapper @(_isFormExpanded ? "is-expanded" : "")">
@@ -85,13 +84,13 @@
 </div>
 
 <div class="mt-4">
-    @if (_sampleData.Any())
+    @if (DataView.Any())
     {
         <div class="table-container">
         <UniversalTable T="Sample"
-                        Items="_sampleData"
-                        TotalCount="_sampleData.Count()"
-                        PageSize="_sampleData.Count()"
+                        Items="DataView"
+                        TotalCount="TotalCount"
+                        PageSize="PageSize"
                         CurrentPage="1"
                         TotalPages="1" />
         </div>
@@ -127,21 +126,12 @@
         _formData.DummySampleNum < 1;
 
     /// <summary>
-    /// When the app starts, load the sample list
-    /// </summary>
-    /// <returns></returns>
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadData();
-    }
-
-    /// <summary>
     /// Resets the filters and fetches the sample table
     /// </summary>
     /// <returns></returns>
-    private async Task LoadData()
+    public override async Task RefreshData(bool keepPage = false)
     {
-        using var context = DbFactory.CreateDbContext();
+        using FPSampleDbContext context = DbFactory.CreateDbContext();
 
         // Fetch the mapping table once to handle bidirectional filtering in memory
         _allMappings = await context.ModelToLine.ToListAsync();
@@ -150,7 +140,7 @@
         _availableModels = _allMappings.Select(m => m.ShortDescription).Distinct().ToList();
         _availableLines = _allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
 
-        _sampleData = await DbContext.Samples.AsNoTracking().ToListAsync();
+        await base.RefreshData(keepPage);
     }
 
     /// <summary>
@@ -245,7 +235,7 @@
                     @creatorName = {_formData.CreatorName}");
 
             _formData = new(); // Reset form
-            await LoadData();
+            await RefreshData();
             _isFormExpanded = false; // Auto-collapse on success to show the table
         }
         catch (Exception ex)

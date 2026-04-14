@@ -1,60 +1,253 @@
 ﻿@page "/model-mappings"
 @using System.Data
+@using System.Threading.Tasks
 @using UploadModelMappings
+@inject IWebHostEnvironment Environment
 @inject BlazorInputProvider InputProvider
 @inject BlazorReporter Reporter
+@implements IDisposable
+@inherits TableManager<ModelLine>
 
 <PageTitle>Upload Model Mappings</PageTitle>
 
-<div class="terminal-window">
-    @foreach (Report log in Reporter.Logs)
-    {
-        <p class="@log.level.ToString().ToLower()">@log.message</p>
-    }
+<h2>Update Model Mappings</h2>
 
-    @* Once the CSS is in place, this will actually create a modal *@
-    @if (isWaitingForConfirm)
+<p>Upload a CSV of the C. Core export here to update the models and line names when a new model is added or an existing model moves to different lines</p>
+<Alert Color="AlertColor.Warning" Class="d-inline-block"><Icon Name="IconName.ExclamationDiamond" />
+    If successful, this will overwrite the existing model-line mappings (samples will remain unchanged, models will have no connection to their old lines)
+</Alert>
+
+<div>
+    <div class="centered-container mb-3">
+        <div class="upload-card @(_isDragging ? "drag-active" : "")">
+            <label for="fileInput" class="upload-button">
+                <i class="bi bi-cloud-arrow-up" style="font-size: 26px"></i> Choose CSV File
+            </label>
+            <InputFile id="fileInput" OnChange="HandleFileSelected" accept=".csv" class="hidden-input-overlay"
+                @ondragenter="HandleDragEnter"
+                @ondragleave="HandleDragLeave"
+                @ondragover="HandleDragOver"
+                @ondrop="HandleDrop" />
+        </div>
+    </div>
+
+    <div class="expandable-container">
+        <div class="expandable-wrapper @(isAwaitingConfirmation ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <Alert Color="AlertColor.Danger" Class="mt-3 animate-fade-in">
+                    <p>
+                        <strong>File Selected:</strong>
+                        @(_selectedFile?.Name ?? "No file selected")
+                        (@((_selectedFile?.Size ?? 0) / 1024) KB)</p>
+                    <Button Color="ButtonColor.Danger" @onclick="() => HandleConfirm(true)">
+                        <Icon Name="IconName.ExclamationTriangle" /> Confirm Overwrite
+                    </Button>
+                    <Button Color="ButtonColor.Secondary" @onclick="() => HandleConfirm(false)">Cancel</Button>
+                </Alert>
+            </div>
+        </div>
+    </div>
+
+    @if (_isUploading && !isAwaitingConfirmation && _displayPercent != 100)
     {
-        <div class="modal-overlay">
-            <div class="modal-content">
-                <p>@currentPrompt?.message</p>
-                <button @onclick="() => HandleConfirm(true)">Yes</button>
-                <button @onclick="() => HandleConfirm(false)">No</button>
+        <div class="centered-container mx-auto w-100">
+            <div class="mt-3 w-50">
+                <div class="d-flex align-items-center justify-content-center mb-2">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    <span>@_currentDisplayStatus</span>
+                </div>
+                <div class="progress mt-2" style="height: 20px">
+                    <div class="progress-bar progress-bar-animated"
+                        role="progressbar"
+                        style="width: @((int)_displayPercent)%; transition: width 0.1s linear;"
+                        aria-valuenow="@((int)_displayPercent)"
+                        aria-valuemin="0"
+                        aria-valuemax="100">
+                        @((int)_displayPercent)%
+                    </div>
+                </div>
             </div>
         </div>
     }
 </div>
 
+<div class="mt-4">
+    @if (DataView.Any())
+    {
+        <UniversalTable T="ModelLine"
+                        Items="DataView"
+                        TotalCount="TotalCount"
+                        PageSize="PageSize"
+                        CurrentPage="1"
+                        TotalPages="1" />
+    }
+    else
+    {
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No model mappings registered yet.</p>
+        </div>
+    }
+</div>
+
 @code {
-    private bool isWaitingForConfirm;
     private Report? currentPrompt;
+    private IBrowserFile? _selectedFile;
+    private string? _filePath;
+    private string _currentDisplayStatus = "Idle";
+    private int _progressPercent = 0;
+    private double _displayPercent = 0;
+    private System.Timers.Timer? _progressTimer;
+
+    // Flags for UI state
+    private bool _isDragging = false;
+    private bool _isUploading = false;
+    private bool isAwaitingConfirmation = false;
+    private bool _isProcessingSelection = false; // Guard against file selection flicker
+
+    private void HandleDragEnter() => _isDragging = true;
+    private void HandleDragOver() => _isDragging = true;
+    private void HandleDragLeave() => _isDragging = false;
+    private void HandleDrop() => _isDragging = false;
 
     protected override void OnInitialized()
     {
         // Link the provider events to this component's state
         InputProvider.OnConfirmationRequested += (prompt) => {
             currentPrompt = prompt;
-            isWaitingForConfirm = true;
+            isAwaitingConfirmation = true;
             InvokeAsync(StateHasChanged);
         };
 
-        Reporter.OnNotify += () => InvokeAsync(StateHasChanged);
+        Reporter.OnNotify += () => {
+            Report? lastLog = Reporter.Logs.LastOrDefault();
+            if (lastLog != null)
+            {
+                // Map CLI strings to GUI Progress
+                _currentDisplayStatus = lastLog.message;
+                _progressPercent = lastLog.message switch {
+                    string m when m.Contains("Connecting") => 20,
+                    string m when m.Contains("Connected") => 40,
+                    string m when m.Contains("Uploading") => 70,
+                    string m when m.Contains("Complete") => 101,
+                    _ => _progressPercent
+                };
+            }
+            InvokeAsync(StateHasChanged);
+        };
     }
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>
+    /// The progress bar is too fast, so to give the user good feedback
+    /// </summary>
+    private void StartProgressSimulation()
     {
-        await StartUpload();
+        _displayPercent = 0;
+        _progressTimer = new System.Timers.Timer(10); // Update every 10ms
+        _progressTimer.Elapsed += (s, e) =>
+        {
+            // Simple "Ease-Out" logic:
+            // Move 10% of the remaining distance to the target each tick
+            var diff = _progressPercent - _displayPercent;
+
+            if (diff > 0.1)
+            {
+                _displayPercent += diff * 0.15; // this factor is the speed parameter
+                InvokeAsync(StateHasChanged);
+            }
+            else if (_progressPercent > 95 && diff < 5)
+            {
+                _displayPercent = 100;
+                _progressTimer?.Stop();
+                InvokeAsync(StateHasChanged);
+            }
+        };
+        _progressTimer.Start();
+    }
+
+    /// <summary>
+    /// When this component unloads, unload the timer
+    /// </summary>
+    public void Dispose()
+    {
+        _progressTimer?.Dispose();
+    }
+
+    /// <summary>
+    /// Set the selected file, with guard check to guarantee no visual flicker
+    /// </summary>
+    /// <param name="e">The event representing file selection.</param>
+    /// <returns>A Task representing that the file was successfully selected.</returns>
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+
+        if (_isProcessingSelection) return;
+        _isProcessingSelection = true;
+
+        try
+        {
+            _selectedFile = e.File;
+            await StartUpload();
+        }
+        finally
+        {
+            _isProcessingSelection = false;
+        }
     }
 
     private void HandleConfirm(bool result)
     {
-        isWaitingForConfirm = false;
+        isAwaitingConfirmation = false;
         InputProvider.SetConfirmResult(result);
+        if (!result){
+            _selectedFile = null;
+            _isUploading = false;
+        }
     }
 
     private async Task StartUpload()
     {
-        ModelMappingUploader uploader = new (InputProvider, Reporter);
-        await uploader.ExecuteAsync();
+        _progressPercent = 5; // Preload to 'feel responsive'
+        StartProgressSimulation(); // Use fake loading bar
+        if (_selectedFile == null) return;
+
+        await Task.Delay(100); // allow dialog activity to finish before beginning
+
+        _isUploading = true;
+        Reporter.ClearLogs();
+        try
+        {
+            // The file content is read into a stream
+            if (_selectedFile != null)
+            {
+                // Putting the upload in wwwroot works well from a file management standpoint, but will trigger dotnet watch's hot reload. dotnet run works fine.
+                var uploadsFolderPath = Path.Combine(Environment.WebRootPath, "uploads");
+                Directory.CreateDirectory(uploadsFolderPath); // Ensure directory exists
+
+                string trustedFileName = $"cmms_mappings_{DateTime.Now:yyyy-MM-dd}";
+                _filePath = Path.Combine(uploadsFolderPath, trustedFileName + Path.GetExtension(_selectedFile.Name));
+
+                // Stream the file data from the element to the server
+                using (FileStream stream = new(_filePath, FileMode.Create))
+                {
+                    await _selectedFile.OpenReadStream().CopyToAsync(stream);
+                }
+                ModelMappingUploader uploader = new (InputProvider, Reporter);
+                await uploader.ExecuteAsync(_filePath);
+                _progressPercent = 100; // Guarantee the progress bar made it all the way
+                await Task.Delay(750); // Make sure it's actually visible to the user for a moment
+                await RefreshData();
+            }
+        }
+        catch (Exception ex)
+        {
+            await Reporter.ReportAsync(new($"\nUpload failed: {ex.Message}", ReportLevel.ERROR));
+        }
+        finally{
+            if(!string.IsNullOrWhiteSpace(_filePath))
+                File.Delete(_filePath); // Clean up the uploads folder upon successful save to DB (the file is stored for less than a second)
+            _selectedFile = null;
+            _isUploading = false;
+            _progressTimer?.Dispose();
+        }
     }
 }

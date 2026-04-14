@@ -304,3 +304,67 @@ h1:focus {
     line-height: 1.6;
     margin: 0 0 20px 0;
 }
+
+/* Visual container for the upload area */
+.upload-card {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fa;
+    border: 3px dashed #dee2e6;
+    border-radius: 25px;
+    padding: 2vh;
+    margin-bottom: 5px;
+    justify-content: center;
+    text-align: center;
+    width: 140vh;
+    height: 20vh;
+    transition: all 0.3s ease;
+}
+
+.upload-card:hover{
+    border-color:hsl(210, 75%, 70%);
+}
+
+.upload-card.drag-active {
+    border-color: #007bff;
+    background-color: hsl(211, 100%, 95%);
+    transform: scale(1.02);
+    transition: all 0.2s ease;
+}
+
+/* Make the actual input invisible but stretch it to fill the card */
+.hidden-input-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0; /* Invisible but clickable/droppable */
+    z-index: 2; /* Sits on top of the button */
+}
+
+/* Style the label as the button */
+.upload-button {
+    display: flex;
+    align-items: center;
+    padding: 8px 20px;
+    cursor: pointer;
+    background-color: hsl(211, 100%, 45%);
+    font-size: 20px;
+    color: white;
+    border-radius: 2px;
+    font-weight: 600;
+    transition: ease 0.2s;
+    gap: 6px;
+    z-index: 1;
+    position: absolute;
+    pointer-events: none;
+}
+
+.progress{
+    color: hsl(210, 76%, 40%)
+}

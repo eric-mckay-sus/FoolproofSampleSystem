@@ -273,13 +273,21 @@ public class BlazorReporter : IReportOutputProvider
     /// <summary>
     /// Gets the list of <see cref="Report"/> objects accessible to the Blazor page.
     /// </summary>
-    public List<Report> Logs { get; } = [];
+    public List<Report> Logs { get; private set; } = [];
 
     /// <summary>
     /// Gets the underlying DataTable object that stores the preview information.
     /// It is important that Blazor persists this so it has concrete data during another upload.
     /// </summary>
     public DataTable? CurrentPreview { get; private set; }
+
+    /// <summary>
+    /// Clears the logs so old data does not persist.
+    /// </summary>
+    public void ClearLogs()
+    {
+        this.Logs = [];
+    }
 
     /// <summary>
     /// <inheritdoc/>

@@ -31,10 +31,10 @@ public static class Program
         builder.Services.AddScoped<IUserIdentityService, UserIdentityService>();
         builder.Services.AddMemoryCache();
 
-        builder.Services.AddScoped<BlazorInputProvider>();
-        builder.Services.AddScoped<IInputProvider>(sp => sp.GetRequiredService<BlazorInputProvider>());
-        builder.Services.AddScoped<BlazorReporter>();
-        builder.Services.AddScoped<IReportOutputProvider>(sp => sp.GetRequiredService<BlazorReporter>());
+        builder.Services.AddTransient<BlazorInputProvider>();
+        builder.Services.AddTransient<IInputProvider>(sp => sp.GetRequiredService<BlazorInputProvider>());
+        builder.Services.AddTransient<BlazorReporter>();
+        builder.Services.AddTransient<IReportOutputProvider>(sp => sp.GetRequiredService<BlazorReporter>());
 
         // Authentication & Authorization
         builder.Services.AddAuthentication("AutoAuth")
