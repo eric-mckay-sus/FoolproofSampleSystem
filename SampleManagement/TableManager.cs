@@ -6,6 +6,7 @@ namespace SampleManagement;
 
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
+using ToastService = BlazorBootstrap.ToastService;
 
 /// <summary>
 /// Minimal table logic for loading and paging data from <see cref="FPSampleDbContext"/>.
@@ -50,6 +51,12 @@ public class TableManager<T> : ComponentBase
     /// </summary>
     [Inject]
     private protected IDbContextFactory<FPSampleDbContext> DbFactory { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets the toast service for displaying success/failure messages.
+    /// </summary>
+    [Inject]
+    private protected ToastService ToastService { get; set; } = default!;
 
     /// <summary>
     /// Loads the current page of data from the database.

@@ -287,6 +287,8 @@ public class BlazorReporter : IReportOutputProvider
     public void ClearLogs()
     {
         this.Logs = [];
+        this.CurrentPreview = null;
+        this.OnNotify?.Invoke();
     }
 
     /// <summary>

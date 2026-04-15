@@ -1,123 +1,165 @@
 ﻿@page "/foolproof-sheet"
-@using System.Data
 @using UploadFpInfo
-@inject BlazorInputProvider InputProvider
-@inject BlazorReporter Reporter
+@inherits UploadPageBase<FoolproofEntry>
 
 <PageTitle>Upload Foolproof Sheet</PageTitle>
 
-<div class="terminal-window">
-    @foreach (var log in Reporter.Logs)
-    {
-        <p class="@log.level.ToString().ToLower()">@log.message</p>
-    }
+<h2>Upload Foolproof Sheets</h2>
 
-    @if (Reporter.CurrentPreview != null && Reporter.CurrentPreview.Rows.Count > 0)
-    {
-        <div class="preview-container">
-            <table>
-                <thead>
-                    <tr>
-                        @foreach (DataColumn col in Reporter.CurrentPreview.Columns)
-                        {
-                            <th>@col.ColumnName</th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (DataRow row in Reporter.CurrentPreview.Rows)
-                    {
-                        <tr>
-                            @foreach (var cell in row.ItemArray)
-                            {
-                                <td>@cell?.ToString()</td>
-                            }
-                        </tr>
-                    }
-                </tbody>
-            </table>
+<p>Upload one or more foolproof dummy sample sheets here to make them available for sample generation. This tool will never overwrite/update existing data.</p>
+
+<div>
+    @* File upload area and button *@
+    <div class="centered-container mb-3">
+        <div class="upload-card @(IsDragging ? "drag-active" : "")">
+            <label for="fileInput" class="upload-button">
+                <i class="bi bi-cloud-arrow-up" style="font-size: 26px"></i> Choose Excel File
+            </label>
+            @* Handle the 'normal' Excel file extensions plus the full MIME types *@
+            <InputFile id="fileInput" OnChange="HandleFileSelection" accept=".xls, xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"" multiple="true" class="hidden-input-overlay"
+                @ondragenter="HandleDragEnter"
+                @ondragleave="HandleDragLeave"
+                @ondragover="HandleDragOver"
+                @ondrop="HandleDrop" />
         </div>
-    }
+    </div>
 
-    @* --- String Input Modal (Model Name/Filter) --- *@
-    @if (isWaitingForInput)
-    {
-        <div class="modal-overlay">
-            <div class="modal-content">
-                <p>@currentPrompt?.message</p>
-                <input @bind="userInput" @onkeyup="HandleKeyUp" autofocus />
-                <div class="modal-buttons">
-                    <button @onclick="SubmitInput">Submit</button>
-                </div>
+    @* Staging confirmation for file selection (happens before upload) *@
+    <div class="expandable-container">
+        <div class="expandable-wrapper @(selectedFiles.Any() && !IsUploading ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <Alert Color="AlertColor.Info" Class="mt-3 animate-fade-in shadow-sm">
+                    <p><strong>Files Selected for Upload:</strong></p>
+                    <ul class="list-unstyled ms-3">
+                        @foreach (var file in selectedFiles)
+                        {
+                            <li>
+                                <Icon Name="IconName.FileEarmarkSpreadsheet" /> @file.Name
+                                <span class="text-muted small">(@(file.Size / 1024) KB)</span>
+                            </li>
+                        }
+                    </ul>
+                    <hr />
+                    <div class="d-flex gap-2">
+                        <Button Color="ButtonColor.Success" @onclick="StartUpload">
+                            <Icon Name="IconName.CloudArrowUpFill" /> Proceed with Upload
+                        </Button>
+                        <Button Color="ButtonColor.Secondary" @onclick="CancelSelection">
+                            Cancel
+                        </Button>
+                    </div>
+                </Alert>
             </div>
         </div>
+    </div>
+
+    @* Log for errors/warnings *@
+    @if(Reporter != null && Reporter.Logs.Any())
+    {
+        <Alert Color="AlertColor.Warning" Class="mt-3 shadow-sm border-primary" style="max-height: 300px; overflow-y: auto;">
+            @foreach(Report log in Reporter.Logs)
+            {
+                @if (log.level == ReportLevel.WARNING || log.level == ReportLevel.ERROR)
+                {
+                    <div class="log-entry">@log.message</div>
+                }
+            }
+        </Alert>
     }
 
-    @* --- Yes/No Confirmation Modal --- *@
-    @if (isWaitingForConfirm)
+    @* Confirmation alert for any confirmation from InputProvider *@
+    <div class="expandable-container">
+        <div class="expandable-wrapper @(IsAwaitingConfirmation ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <Alert Color="AlertColor.Info" Class="mt-3 animate-fade-in">
+                    <div class="d-flex flex-column">
+                        <label class="mb-2 fw-bold">@currentPrompt?.message</label>
+                        <div class="me-2">
+                            <Button Color="ButtonColor.Success"
+                                    Outline="true"
+                                    TooltipTitle="Upload more data from this file under a different C. Core model"
+                                    @onclick="() => HandleConfirm(true)">
+                                <Icon Name="IconName.ArrowRepeat" /> Repeat File
+                            </Button>
+                            <Button Color="ButtonColor.Secondary" Outline="true" @onclick="() => HandleConfirm(false)">
+                                <Icon Name="IconName.ArrowRight" /> Continue to Next
+                            </Button>
+                        </div>
+                    </div>
+                </Alert>
+            </div>
+        </div>
+    </div>
+
+    @* Input alert for any time InputProvider requires user input *@
+    <div class="expandable-container">
+        <div class="expandable-wrapper @(IsAwaitingInput ? "is-expanded" : "")">
+            <div class="expandable-content">
+                <Alert Color="AlertColor.Info" Class="mt-3 shadow-sm border-primary">
+                    <div class="d-flex flex-column">
+                        <label class="mb-2 fw-bold">@currentPrompt?.message</label>
+                        <div class="input-group me-2">
+                            <input type="text" class="form-control" @bind="UserInputText"
+                                @onkeyup="@(e => { if(e.Key == "Enter") SubmitUserInput(); })"
+                                placeholder="Type here..." />
+                            <Button Color="ButtonColor.Primary" @onclick="SubmitUserInput">Submit</Button>
+                        </div>
+                    </div>
+                </Alert>
+            </div>
+        </div>
+    </div>
+
+    @* The loading bar, displayed in upload state when loading isn't yet complete *@
+    @if (IsUploading && DisplayPercent != 100)
     {
-        <div class="modal-overlay">
-            <div class="modal-content">
-                <p>@currentPrompt?.message</p>
-                <div class="modal-buttons">
-                    <button @onclick="() => HandleConfirm(true)">Yes</button>
-                    <button @onclick="() => HandleConfirm(false)">No</button>
+        <div class="centered-container mx-auto w-100">
+            <div class="mt-3 w-50">
+                <div class="d-flex align-items-center justify-content-center mb-2" style="font-size: 1.5rem">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    <span>@CurrentDisplayStatus</span>
+                </div>
+                <div class="progress mt-2" style="height: 30px">
+                    <div class="progress-bar progress-bar-animated"
+                        role="progressbar"
+                        style="width: @((int)DisplayPercent)%; transition: width 0.1s linear;"
+                        aria-valuenow="@((int)DisplayPercent)"
+                        aria-valuemin="0"
+                        aria-valuemax="100">
+                        @((int)DisplayPercent)%
+                    </div>
                 </div>
             </div>
         </div>
     }
 </div>
 
-@code {
-    private bool isWaitingForConfirm;
-    private bool isWaitingForInput;
-    private string userInput = string.Empty;
-    private Report? currentPrompt;
-
-    protected override void OnInitialized()
+@* The table shown will usually be the full FP table, but is replaced by the preview if it exists
+   Empty message only appears when there's neither a preview or any data in the FP table. *@
+<div class="mt-4">
+    @if (Reporter != null && Reporter.CurrentPreview != null)
     {
-        // Link the provider events to this component's state
-        InputProvider.OnConfirmationRequested += (prompt) => {
-            currentPrompt = prompt;
-            isWaitingForConfirm = true;
-            InvokeAsync(StateHasChanged);
-        };
-
-        InputProvider.OnInputRequested += (prompt) => {
-            currentPrompt = prompt;
-            userInput = string.Empty;
-            isWaitingForInput = true;
-            InvokeAsync(StateHasChanged);
-        };
-
-        Reporter.OnNotify += () => InvokeAsync(StateHasChanged);
+        <h3>Upload Preview</h3>
+        <UniversalTable T="FoolproofPreviewRow"
+                        Items="GetPreviewItems()"
+                        TotalCount="Reporter.CurrentPreview.Rows.Count"
+                        PageSize="Reporter.CurrentPreview.Rows.Count"
+                        CurrentPage="1"
+                        TotalPages="1" />
     }
-
-    protected override async Task OnInitializedAsync()
+    else if (DataView.Any())
     {
-        await StartUpload();
+        <UniversalTable T="FoolproofEntry"
+                        Items="DataView"
+                        TotalCount="TotalCount"
+                        PageSize="PageSize"
+                        CurrentPage="1"
+                        TotalPages="1" />
     }
-
-    private void HandleConfirm(bool result)
+    else
     {
-        isWaitingForConfirm = false;
-        InputProvider.SetConfirmResult(result);
+        <div class="text-center p-5 border rounded bg-light">
+            <p class="text-muted mb-0">No model mappings registered yet.</p>
+        </div>
     }
-
-    private void SubmitInput()
-    {
-        isWaitingForInput = false;
-        InputProvider.SetInputResult(userInput);
-    }
-
-    private void HandleKeyUp(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") SubmitInput();
-    }
-
-    private async Task StartUpload()
-    {
-        FPSheetUploader uploader = new (InputProvider, Reporter);
-        await uploader.ExecuteAsync();
-    }
-}
+</div>

@@ -12,6 +12,7 @@ using NPOI.XSSF.UserModel; // for newer XLSX files
 
 using static FPUploadUtilities; // static allows its methods to be accessed later without qualification
 using FileUploadCommon;
+using Microsoft.SqlServer.Server;
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
@@ -124,6 +125,10 @@ public class FPSheetUploader
             {
                 await this.Report(miscErrorMessage, ReportLevel.ERROR);
             }
+        }
+        catch (FormatException f)
+        {
+            await this.Report($"Formatting error: {f.Message}", ReportLevel.ERROR);
         }
         catch (Exception ex)
         {
@@ -241,6 +246,11 @@ public class FPSheetUploader
                 batchContainsDuplicate = batchContainsDuplicate || currentContainsDuplicate;
                 batchContainsMisc = batchContainsMisc || currentContainsMisc;
             }
+            catch (FormatException f)
+            {
+                await this.Report($"\t[INVALID FORMAT] {f.Message}\n", ReportLevel.ERROR);
+                batchContainsMisc = true;
+            }
             catch (Exception ex)
             {
                 await this.Report($"\t[SKIP] {ex.Message}\n", ReportLevel.ERROR);
@@ -268,11 +278,31 @@ public class FPSheetUploader
                     ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.\n");
         }
 
-        // Extract metadata (header row)
+        // Extract and validate metadata (header row)
         (byte revision, DateTime issueDate, string? issuer) = ParseMetadata(sheet);
 
-        // Get column indices associated with column names
+        if (issueDate == DateTime.MinValue)
+        {
+            throw new FormatException("Could not find a valid issue date in the header area.");
+        }
+        else if (revision == byte.MaxValue)
+        {
+            throw new FormatException("Could not find a valid revision number in the header area.");
+        }
+        else if (string.IsNullOrWhiteSpace(issuer))
+        {
+            throw new FormatException("Could not find a valid issuer name in the header area.");
+        }
+
+        // Get column indices associated with column names and verify all necessary columns are present
         Dictionary<string, int> colMap = MapHeaderIndices(sheet);
+        foreach (string header in Config.DataHeaderNames)
+        {
+            if (colMap[header] == -1)
+            {
+                throw new FormatException($"Missing required column '{header}'.");
+            }
+        }
 
         // Initialize flags for error detection and intention to repeat
         bool hasDuplicate = false;
@@ -323,7 +353,7 @@ public class FPSheetUploader
                         }
                         catch (SqlException rowEx) when (rowEx.Number == 2627 || rowEx.Number == 2601)
                         {
-                            rowSkipStack.Push(new ($"\t[ROW SKIP] Duplicate: Rev {revision}, Location {dr["location"]} Dummy #{dr["dummySampleNum"]}\n", ReportLevel.IMPORTANT));
+                            rowSkipStack.Push(new ($"\t[ROW SKIP] Duplicate: Rev {revision}, Location {dr["location"]} Dummy #{dr["dummySampleNum"]}\n", ReportLevel.WARNING));
                             hasDuplicate = true;
                             dt.Rows.RemoveAt(i); // remove the problem row
                         }

@@ -89,7 +89,7 @@ public static partial class FPUploadUtilities
         }
 
         string clean = RevisionNumberCleaner().Replace(rev, string.Empty);
-        return byte.TryParse(clean, out byte result) ? result : (byte)0;
+        return byte.TryParse(clean, out byte result) ? result : byte.MaxValue;
     }
 
     /// <summary>
