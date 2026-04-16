@@ -7,6 +7,7 @@ namespace SampleManagement;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using ToastService = BlazorBootstrap.ToastService;
+using System.Linq.Dynamic.Core;
 
 /// <summary>
 /// Minimal table logic for loading and paging data from <see cref="FPSampleDbContext"/>.
@@ -47,6 +48,16 @@ public class TableManager<T> : ComponentBase
     public int TotalPages => this.PageSize > 0 ? (int)Math.Ceiling((double)this.TotalCount / this.PageSize) : 1;
 
     /// <summary>
+    /// Gets or sets the name of the column that results are currently being sorted by.
+    /// </summary>
+    public string CurrentSortColumn { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the sort direction of the currently sorted column.
+    /// </summary>
+    public string SortDir { get; set; } = "none";
+
+    /// <summary>
     /// Gets or sets the thread-safe DB context generator.
     /// </summary>
     [Inject]
@@ -77,16 +88,58 @@ public class TableManager<T> : ComponentBase
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
             IQueryable<T> query = context.Set<T>().AsNoTracking();
 
+            query = this.ApplySorting(query);
             this.TotalCount = await query.CountAsync();
             this.DataView = await query
                 .Skip((this.CurrentPage - 1) * this.PageSize)
                 .Take(this.PageSize)
-                .ToListAsync();
+                .ToDynamicListAsync<T>();
         }
         finally
         {
             this.IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Cycles through sort directions when column is toggled
+    /// Cycle order: None -> Asc -> Desc.
+    /// </summary>
+    /// <param name="columnName">The column to be toggled.</param>
+    /// <returns>A Task representing that the sort has been applied.</returns>
+    public async Task ToggleSort(string columnName)
+    {
+        if (this.CurrentSortColumn != columnName)
+        { // If coming from none, save the column name (it's changed) and switch to asc
+            this.CurrentSortColumn = columnName;
+            this.SortDir = "ascending";
+        }
+        else if (this.SortDir == "ascending")
+        { // If coming from asc, only need to switch to desc
+            this.SortDir = "descending";
+        }
+        else
+        { // If coming from desc, switch to none and inform model no column is specified to sort
+            this.SortDir = "none";
+            this.CurrentSortColumn = string.Empty;
+        }
+
+        await this.RefreshData(); // because the sort parameters change we want a guaranteed refresh
+    }
+
+    /// <summary>
+    /// Helper to render the arrow.
+    /// </summary>
+    /// <param name="columnName">The column for which to update the sort icon.</param>
+    /// <returns>The Unicode arrow representing the sort direction.</returns>
+    public string GetSortIcon(string columnName)
+    {
+        if (this.CurrentSortColumn != columnName || this.SortDir == "none")
+        {
+            return "↕";
+        }
+
+        return this.SortDir == "ascending" ? "▲" : "▼";
     }
 
     /// <summary>
@@ -115,7 +168,7 @@ public class TableManager<T> : ComponentBase
     /// </summary>
     /// <param name="newSize">The page size to change to.</param>
     /// <returns>A Task representing that the page size has been changed.</returns>
-    public async Task ChangePageSize(int newSize)
+    public async Task AlterPageSize(int newSize)
     {
         if (newSize <= 0 || newSize == this.PageSize)
         {
@@ -142,4 +195,20 @@ public class TableManager<T> : ComponentBase
     /// </summary>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync() => await this.RefreshData();
+
+    /// <summary>
+    /// Uses dynamic LINQ to draft a SQL ORDER BY based on the current sort.
+    /// </summary>
+    /// <param name="query">The query to which the sorts should be appended.</param>
+    /// <returns>An IQueryable object with sorts applied.</returns>
+    private IQueryable<T> ApplySorting(IQueryable<T> query)
+    {
+        if (this.SortDir == "none" || string.IsNullOrWhiteSpace(this.CurrentSortColumn))
+        {
+            return query;
+        }
+
+        // Null is the smallest value for any column, so it clutters ascending sorts
+        return query.Where($"{this.CurrentSortColumn} != null").OrderBy($"{this.CurrentSortColumn} {this.SortDir}");
+    }
 }

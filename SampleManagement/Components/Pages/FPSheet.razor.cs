@@ -70,6 +70,10 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             };
             this.InvokeAsync(this.StateHasChanged);
         };
+
+        this.CurrentSortColumn = "IssueDate";
+        this.SortDir = "descending";
+        base.OnInitialized();
     }
 
     /// <summary>

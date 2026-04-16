@@ -50,6 +50,10 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
 
             this.InvokeAsync(this.StateHasChanged);
         };
+
+        this.CurrentSortColumn = "ShortDescription";
+        this.SortDir = "ascending";
+        base.OnInitialized();
     }
 
     /// <summary>

@@ -45,7 +45,7 @@
                         <i class="bi bi-cloud-arrow-up" style="font-size: 26px"></i> Choose Excel File
                     </label>
                     @* Handle the 'normal' Excel file extensions plus the full MIME types *@
-                    <InputFile id="fileInput" OnChange="HandleFileSelection" accept=".xls, xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"" multiple="true" class="hidden-input-overlay"
+                    <InputFile id="fileInput" OnChange="HandleFileSelection" accept=".xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"" multiple="true" class="hidden-input-overlay"
                         @ondragenter="HandleDragEnter"
                         @ondragleave="HandleDragLeave"
                         @ondragover="HandleDragOver"
@@ -117,7 +117,7 @@
     <div class="centered-container mx-auto w-100">
         <div class="mt-3 w-50">
             <div class="d-flex align-items-center justify-content-center mb-2" style="font-size: 1.5rem">
-                <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                <div class="spinner-border text-primary me-2" role="status"></div>
                 <span>@CurrentDisplayStatus</span>
             </div>
             <div class="progress mt-2" style="height: 30px">
@@ -206,12 +206,8 @@
     }
     else if (DataView.Any())
     {
-        <UniversalTable T="FoolproofEntry"
-                        Items="DataView"
-                        TotalCount="TotalCount"
-                        PageSize="PageSize"
-                        CurrentPage="1"
-                        TotalPages="1" />
+        <TablePresenter T="FoolproofEntry"
+                        Base="this" />
     }
     else
     {

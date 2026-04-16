@@ -9,7 +9,7 @@ using ToastType = BlazorBootstrap.ToastType;
 /// <summary>
 /// Code-behind for the CreateSample page.
 /// </summary>
-public partial class CreateSample
+public partial class CreateSample : TableManager<Sample>
 {
     /// <summary>
     /// List of all entries in the MTL table.
@@ -81,6 +81,16 @@ public partial class CreateSample
         this.availableLines = this.allMappings.Select(m => m.WorkCenterCode).Distinct().ToList();
 
         await base.RefreshData(keepPage);
+    }
+
+    /// <summary>
+    /// When this page loads, set the sorting information, then let the parent set up.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        this.CurrentSortColumn = "CreationDate";
+        this.SortDir = "descending";
+        base.OnInitialized();
     }
 
     /// <summary>

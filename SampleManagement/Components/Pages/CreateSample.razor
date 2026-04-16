@@ -86,14 +86,7 @@
 <div class="mt-4">
     @if (DataView.Any())
     {
-        <div class="table-container">
-        <UniversalTable T="Sample"
-                        Items="DataView"
-                        TotalCount="TotalCount"
-                        PageSize="PageSize"
-                        CurrentPage="1"
-                        TotalPages="1" />
-        </div>
+        <TablePresenter T="Sample" Base="this" />
     }
     else
     {

@@ -1,0 +1,22 @@
+@typeparam T where T : class
+
+<UniversalTable
+    Items="Base.DataView"
+    CurrentPage="Base.CurrentPage"
+    TotalPages="Base.TotalPages"
+    TotalCount="Base.TotalCount"
+    PageSize="Base.PageSize"
+    OnPageChange="Base.ChangePage"
+    OnSort="Base.ToggleSort"
+    GetSortIcon="Base.GetSortIcon"
+    OnPageSizeChange="Base.AlterPageSize"
+    OnPrint="OnPrint"
+    OnExpand="OnExpand" />
+
+@code{
+    [Parameter, EditorRequired]
+    public TableManager<T> Base { get; set; } = default!;
+
+    [Parameter] public EventCallback<T> OnPrint { get; set; }
+    [Parameter] public EventCallback<T> OnExpand { get; set; }
+}
