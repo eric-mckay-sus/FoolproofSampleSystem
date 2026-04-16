@@ -99,8 +99,11 @@
                 <div class="d-flex flex-column">
                     <label class="mb-2 fw-bold">@currentPrompt?.message</label>
                     <div class="input-group me-2">
-                        <input type="text" class="form-control" @bind="UserInputText"
+                        <input id="model-input" type="text"
+                            class="form-control"
+                            @bind="UserInputText"
                             @onkeyup="@(e => { if(e.Key == "Enter") SubmitUserInput(); })"
+                            @onfocusout="@(async () => await JS.InvokeVoidAsync("focusElement", "model-input"))"
                             placeholder="Type here..." />
                         <Button Color="ButtonColor.Primary" @onclick="SubmitUserInput">Submit</Button>
                     </div>

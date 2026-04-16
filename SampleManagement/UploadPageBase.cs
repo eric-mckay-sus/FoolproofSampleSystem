@@ -91,9 +91,14 @@ public class UploadPageBase<T> : TableManager<T>, IDisposable
     protected double DisplayPercent { get; set; } = 0;
 
     /// <summary>
-    /// Gets or sets the timer to determine the frequency of loading updates.
+    /// Gets or sets the control for the creation/disposal of <see cref="ProgressTimer"/>.
     /// </summary>
-    protected System.Timers.Timer? ProgressTimer { get; set; }
+    protected CancellationTokenSource? TimerCts { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timer used for the elastic loading bar.
+    /// </summary>
+    protected PeriodicTimer? ProgressTimer { get; set; }
 
     /// <summary>
     /// Gets or sets user input, collected from the search bar.
@@ -101,11 +106,17 @@ public class UploadPageBase<T> : TableManager<T>, IDisposable
     protected string UserInputText { get; set; } = string.Empty;
 
     /// <summary>
-    /// When this component unloads, unload the timer.
+    /// When this component unloads, unload the timer and its cancellation token.
     /// </summary>
     public void Dispose()
     {
+        // Fire the CancellationToken, dispose immediately
+        this.TimerCts?.Cancel();
+        this.TimerCts?.Dispose();
+
+        // Dispose the timer
         this.ProgressTimer?.Dispose();
+
         this.CleanupFileSystem();
         this.IsUploading = false;
     }
@@ -135,29 +146,46 @@ public class UploadPageBase<T> : TableManager<T>, IDisposable
     /// An 'elastic' progress bar (displayed completion approaches actual completion at higher rate the further they are apart)
     /// Matching the actual upload progress looks too fast, so to give the user good feedback, slow it down artificially.
     /// </summary>
-    protected void StartProgressSimulation()
+    /// <returns>A Task representing that the elastic loading bar is active.</returns>
+    protected async Task StartProgressSimulation()
     {
-        this.DisplayPercent = 0;
-        this.ProgressTimer = new System.Timers.Timer(10); // Update every 10ms
-        this.ProgressTimer.Elapsed += (s, e) =>
-        {
-            // Simple "Ease-Out" logic:
-            // Move 10% of the remaining distance to the target each tick
-            double diff = this.ProgressPercent - this.DisplayPercent;
+        // Cancel any existing progress timer
+        this.TimerCts?.Cancel();
+        this.TimerCts = new ();
+        CancellationToken token = this.TimerCts.Token;
 
-            if (diff > 0.1)
+        this.DisplayPercent = 0;
+        this.ProgressTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(16)); // Assuming 60 Hz, this is the hardware limit
+
+        try
+        {
+            while (await this.ProgressTimer.WaitForNextTickAsync(token))
             {
-                this.DisplayPercent += diff * 0.15; // this factor is the speed parameter
-                this.InvokeAsync(this.StateHasChanged);
+                // Simple "Ease-Out" logic:
+                // Move 10% of the remaining distance to the target each tick
+                double diff = this.ProgressPercent - this.DisplayPercent;
+
+                if (diff > 0.1) // Standard elastic progress
+                {
+                    this.DisplayPercent += diff * 0.15; // this factor is the elasticity parameter
+                    await this.InvokeAsync(this.StateHasChanged);
+                }
+                else if (this.ProgressPercent > 95 && diff < 5) // Finished, jump to end
+                {
+                    this.DisplayPercent = 100;
+                    await this.InvokeAsync(this.StateHasChanged);
+                    break;
+                }
             }
-            else if (this.ProgressPercent > 95 && diff < 5)
-            {
-                this.DisplayPercent = 100;
-                this.ProgressTimer?.Stop();
-                this.InvokeAsync(this.StateHasChanged);
-            }
-        };
-        this.ProgressTimer.Start();
+        }
+        catch (OperationCanceledException)
+        {
+            // This exception is always thrown when a CancellationToken is used
+        }
+        finally
+        {
+            this.ProgressTimer?.Dispose();
+        }
     }
 
     /// <summary>

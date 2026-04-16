@@ -103,8 +103,13 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     /// <returns>A Task representing that the upload is complete.</returns>
     private async Task StartUpload()
     {
+        if (this.IsUploading) // Don't allow another upload during this one
+        {
+            return;
+        }
+
         this.ProgressPercent = 5; // Preload to 'feel responsive'
-        this.StartProgressSimulation(); // Use fake loading bar
+        _ = this.StartProgressSimulation(); // Intentionally fire & forget the loading bar instead of awaiting; it manages itself and otherwise creates issues with the main thread freezing because of the while loop.
         if (this.selectedFile == null)
         {
             return;
@@ -149,7 +154,6 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         catch (Exception ex)
         {
             this.ToastService.Notify(new (ToastType.Danger, $"\nUpload failed: {ex.Message}"));
-            this.ProgressTimer?.Stop();
         }
         finally
         {

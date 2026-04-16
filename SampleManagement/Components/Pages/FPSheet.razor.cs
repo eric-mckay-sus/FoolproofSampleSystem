@@ -35,23 +35,26 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     /// When this page loads, wire the input provider's confirmation and user input events to auto-open an alert (with flag).
     /// Also, set the output's OnNotify event to update the progress bar.
     /// </summary>
-    protected override void OnInitialized()
+    /// <returns>A Task representing that the page is ready.</returns>
+    protected override async Task OnInitializedAsync()
     {
         // Link the input provider events to this component's state
-        this.InputProvider.OnConfirmationRequested += (prompt) =>
+        this.InputProvider.OnConfirmationRequested += async (prompt) =>
         {
             this.currentPrompt = prompt;
             this.IsAwaitingConfirmation = true;
-            this.InvokeAsync(this.StateHasChanged);
+            await this.InvokeAsync(this.StateHasChanged);
         };
 
-        this.InputProvider.OnInputRequested += (prompt, error) =>
+        this.InputProvider.OnInputRequested += async (prompt, error) =>
         {
             this.currentPrompt = prompt;
             this.inputError = error;
             this.UserInputText = string.Empty;
             this.IsAwaitingInput = true;
-            this.InvokeAsync(this.StateHasChanged);
+            await this.InvokeAsync(this.StateHasChanged);
+            await Task.Delay(100);
+            await this.JS.InvokeVoidAsync("focusElement", "model-input");
         };
 
         // Do the same for the output provider events
@@ -73,7 +76,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
 
         this.CurrentSortColumn = "IssueDate";
         this.SortDir = "descending";
-        base.OnInitialized();
+        await base.OnInitializedAsync();
     }
 
     /// <summary>
@@ -177,7 +180,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private async Task StartUpload()
     {
         this.ProgressPercent = 5; // Preload to 'feel responsive'
-        this.StartProgressSimulation(); // Use fake loading bar
+        await this.StartProgressSimulation(); // Use fake loading bar
         if (!this.selectedFiles.Any())
         {
             return;
@@ -229,7 +232,6 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         finally
         {
             this.CleanupFileSystem();
-            this.ProgressTimer?.Dispose();
             await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
             this.selectedFiles.Clear();
         }

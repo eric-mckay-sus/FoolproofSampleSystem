@@ -33,6 +33,17 @@
         }
     };
     </script>
+
+    @* Script to focus a target element by ID *@
+    <script>
+        window.focusElement = (elementId) => {
+            const el = document.getElementById(elementId);
+            if (el) {
+                // A tiny timeout helps if Blazor is still finishing the render
+                setTimeout(() => el.focus(), 20);
+            }
+        };
+    </script>
 </body>
 
 </html>
