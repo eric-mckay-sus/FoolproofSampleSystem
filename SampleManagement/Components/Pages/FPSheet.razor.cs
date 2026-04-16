@@ -7,6 +7,7 @@ namespace SampleManagement.Components.Pages;
 using System.Data;
 using FileUploadCommon;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
 using UploadFpInfo;
 using ToastType = BlazorBootstrap.ToastType;
 
@@ -174,19 +175,18 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
 
         this.IsUploading = true;
         this.Reporter.ClearLogs();
-        string uploadsFolderPath = Path.Combine(this.Environment.WebRootPath, "uploads");
         try
         {
             // The file content is read into a stream
             if (this.selectedFiles.Any())
             {
                 // Putting the upload in wwwroot works well from a file management standpoint, but will trigger dotnet watch's hot reload. dotnet run works fine.
-                Directory.CreateDirectory(uploadsFolderPath); // Ensure directory exists
+                Directory.CreateDirectory(this.UploadsFolderPath); // Ensure directory exists
 
                 foreach (IBrowserFile file in this.selectedFiles)
                 {
                     string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
-                    string filePath = Path.Combine(uploadsFolderPath, trustedFileName);
+                    string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
 
                     // Stream the file data from the element to the server
                     using (FileStream stream = new (filePath, FileMode.Create))
@@ -195,8 +195,9 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
                     }
                 }
 
+                await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
                 FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
-                await uploader.ExecuteAsync(uploadsFolderPath); // Batch it even when only one file (for simplicity)
+                await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
                 Report? match = this.Reporter.Logs.FirstOrDefault(r => r.level == ReportLevel.ERROR);
                 if (match != null)
                 {
@@ -216,24 +217,9 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         }
         finally
         {
-            try
-            {
-                // Skip directory delete if there were no selected files (thus no need to create a directory)
-                if (Directory.Exists(uploadsFolderPath))
-                {
-                    // Use recursive mode to delete the directory AND its contents
-                    Directory.Delete(uploadsFolderPath, true);
-                }
-            }
-            catch (IOException ex)
-            {
-                // Sometimes a file is still "locked" by the OS for a moment after the stream closes. Catch it to avoid a crash.
-                this.ToastService.Notify(new (ToastType.Danger, $"Cleanup warning: {ex.Message}"));
-            }
-
+            this.Dispose();
+            await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
             this.selectedFiles.Clear();
-            this.IsUploading = false;
-            this.ProgressTimer?.Dispose();
         }
     }
 }

@@ -275,7 +275,7 @@ public class FPSheetUploader
         using (IWorkbook workbook = excelPath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? new XSSFWorkbook(fs) : new HSSFWorkbook(fs))
         {
             sheet = workbook.GetSheetAt(Config.SheetIndex)
-                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found.\n");
+                    ?? throw new Exception($"Sheet index {Config.SheetIndex} not found in {excelPath}.\n");
         }
 
         // Extract and validate metadata (header row)
@@ -283,15 +283,15 @@ public class FPSheetUploader
 
         if (issueDate == DateTime.MinValue)
         {
-            throw new FormatException("Could not find a valid issue date in the header area.");
+            throw new FormatException($"Could not find a valid issue date in the header area of {excelPath}.");
         }
         else if (revision == byte.MaxValue)
         {
-            throw new FormatException("Could not find a valid revision number in the header area.");
+            throw new FormatException($"Could not find a valid revision number in the header area of {excelPath}.");
         }
         else if (string.IsNullOrWhiteSpace(issuer))
         {
-            throw new FormatException("Could not find a valid issuer name in the header area.");
+            throw new FormatException($"Could not find a valid issuer name in the header area of {excelPath}.");
         }
 
         // Get column indices associated with column names and verify all necessary columns are present
@@ -300,7 +300,7 @@ public class FPSheetUploader
         {
             if (colMap[header] == -1)
             {
-                throw new FormatException($"Missing required column '{header}'.");
+                throw new FormatException($"Missing required column '{header}' in {excelPath}.");
             }
         }
 

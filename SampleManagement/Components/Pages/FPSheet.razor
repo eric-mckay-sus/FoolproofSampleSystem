@@ -1,6 +1,7 @@
 ﻿@page "/foolproof-sheet"
 @using UploadFpInfo
 @inherits UploadPageBase<FoolproofEntry>
+@implements IDisposable
 
 <PageTitle>Upload Foolproof Sheet</PageTitle>
 
@@ -29,9 +30,9 @@
         <div class="expandable-wrapper @(selectedFiles.Any() && !IsUploading ? "is-expanded" : "")">
             <div class="expandable-content">
                 <Alert Color="AlertColor.Info" Class="mt-3 animate-fade-in shadow-sm">
-                    <p><strong>Files Selected for Upload:</strong></p>
+                    <p><strong>Files Selected for Upload:</strong>(@selectedFiles.Count)</p>
                     <ul class="list-unstyled ms-3">
-                        @foreach (var file in selectedFiles)
+                        @foreach (IBrowserFile file in selectedFiles)
                         {
                             <li>
                                 <Icon Name="IconName.FileEarmarkSpreadsheet" /> @file.Name

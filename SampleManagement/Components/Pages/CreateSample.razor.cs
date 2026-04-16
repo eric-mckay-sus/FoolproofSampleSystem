@@ -4,6 +4,7 @@
 
 namespace SampleManagement.Components.Pages;
 using Microsoft.EntityFrameworkCore;
+using ToastType = BlazorBootstrap.ToastType;
 
 /// <summary>
 /// Code-behind for the CreateSample page.
@@ -169,7 +170,7 @@ public partial class CreateSample
 
         try
         {
-            using var context = this.DbFactory.CreateDbContext();
+            using FPSampleDbContext context = this.DbFactory.CreateDbContext();
 
             // ExecuteSqlInterpolatedAsync internally wraps each parameter in an injection-safe DbParameter
             await context.Database.ExecuteSqlInterpolatedAsync($@"
@@ -182,10 +183,12 @@ public partial class CreateSample
             this.formData = new (); // Reset form
             await this.RefreshData();
             this.isFormExpanded = false; // Auto-collapse on success to show the table
+            this.ToastService.Notify(new (ToastType.Success, "Sample created successfully!"));
         }
         catch (Exception ex)
         {
             this.errorMessage = $"Database Error: {ex.Message}";
+            this.ToastService.Notify(new (ToastType.Danger, "Sample creation failed."));
         }
     }
 

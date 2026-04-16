@@ -7,6 +7,7 @@ namespace SampleManagement.Components.Pages;
 using FileUploadCommon;
 using Microsoft.AspNetCore.Components.Forms;
 using UploadModelMappings;
+using Microsoft.JSInterop;
 using ToastType = BlazorBootstrap.ToastType;
 
 /// <summary>
@@ -115,11 +116,10 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
             if (this.selectedFile != null)
             {
                 // Putting the upload in wwwroot works well from a file management standpoint, but will trigger dotnet watch's hot reload. dotnet run works fine.
-                string uploadsFolderPath = Path.Combine(this.Environment.WebRootPath, "uploads");
-                Directory.CreateDirectory(uploadsFolderPath); // Ensure directory exists
+                Directory.CreateDirectory(this.UploadsFolderPath); // Ensure directory exists
 
                 string trustedFileName = $"model_line_mappings_{DateTime.Now:yyyy-MM-dd}";
-                this.filePath = Path.Combine(uploadsFolderPath, trustedFileName + Path.GetExtension(this.selectedFile.Name));
+                this.filePath = Path.Combine(this.UploadsFolderPath, trustedFileName + Path.GetExtension(this.selectedFile.Name));
 
                 // Stream the file data from the element to the server
                 using (FileStream stream = new (this.filePath, FileMode.Create))
@@ -127,6 +127,7 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
                     await this.selectedFile.OpenReadStream().CopyToAsync(stream);
                 }
 
+                await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
                 ModelMappingUploader uploader = new (this.InputProvider, this.Reporter);
                 await uploader.ExecuteAsync(this.filePath);
                 Report? match = this.Reporter.Logs.FirstOrDefault(r => r.level == ReportLevel.ERROR);
@@ -148,14 +149,9 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         }
         finally
         {
-            if (!string.IsNullOrWhiteSpace(this.filePath))
-            {
-                File.Delete(this.filePath); // Clean up the uploads folder upon successful save to DB (the file is stored for less than a second)
-            }
-
+            this.Dispose();
+            await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
             this.selectedFile = null;
-            this.IsUploading = false;
-            this.ProgressTimer?.Dispose();
         }
     }
 }

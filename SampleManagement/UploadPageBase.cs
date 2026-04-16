@@ -6,6 +6,8 @@ namespace SampleManagement;
 
 using Inject = Microsoft.AspNetCore.Components.InjectAttribute;
 using FileUploadCommon;
+using ToastType = BlazorBootstrap.ToastType;
+using Microsoft.JSInterop;
 
 /// <summary>
 /// Represents a generic upload page.
@@ -14,6 +16,11 @@ using FileUploadCommon;
 public class UploadPageBase<T> : TableManager<T>, IDisposable
     where T : class
 {
+    /// <summary>
+    /// This session's unique ID (for naming this session's directory).
+    /// </summary>
+    private static readonly string SessionId = Guid.NewGuid().ToString();
+
     /// <summary>
     /// Gets or sets the environment in which this upload page runs.
     /// </summary>
@@ -31,6 +38,17 @@ public class UploadPageBase<T> : TableManager<T>, IDisposable
     /// </summary>
     [Inject]
     public BlazorReporter Reporter { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets the JavaScript runtime for reload protection.
+    /// </summary>
+    [Inject]
+    public IJSRuntime JS { get; set; } = default!;
+
+    /// <summary>
+    /// Gets the path of the uploads folder for this session.
+    /// </summary>
+    protected string UploadsFolderPath => Path.Combine(this.Environment.WebRootPath, "uploads", SessionId);
 
     /// <summary>
     /// Gets or sets a value indicating whether the user is dragging a file over the file input location.
@@ -85,7 +103,33 @@ public class UploadPageBase<T> : TableManager<T>, IDisposable
     /// <summary>
     /// When this component unloads, unload the timer.
     /// </summary>
-    public void Dispose() => this.ProgressTimer?.Dispose();
+    public void Dispose()
+    {
+        this.ProgressTimer?.Dispose();
+        this.CleanupFileSystem();
+        this.IsUploading = false;
+    }
+
+    /// <summary>
+    /// Cleans up this user's files that are on the server (i.e. unfinished uploads).
+    /// </summary>
+    protected void CleanupFileSystem()
+    {
+        try
+        {
+            // Skip directory delete if there were no selected files (thus no need to create a directory)
+            if (Directory.Exists(this.UploadsFolderPath))
+            {
+                // Use recursive mode to delete the directory AND its contents
+                Directory.Delete(this.UploadsFolderPath, true);
+            }
+        }
+        catch (IOException ex)
+        {
+            // Sometimes a file is still "locked" by the OS for a moment after the stream closes. Catch it to avoid a crash.
+            this.ToastService.Notify(new (ToastType.Danger, $"Cleanup warning: {ex.Message}"));
+        }
+    }
 
     /// <summary>
     /// An 'elastic' progress bar (displayed completion approaches actual completion at higher rate the further they are apart)

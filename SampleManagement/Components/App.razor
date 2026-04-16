@@ -19,6 +19,20 @@
     <script src="_content/Blazor.Bootstrap/blazor.bootstrap.js"></script>
     <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <script src="_framework/blazor.web.js"></script>
+
+    @* Safety in case users don't know refreshing unloads their files *@
+    <script>
+        window.preventConfigurationLoss = {
+        setEditorHandler: function () {
+            window.onbeforeunload = function () {
+                return "An upload is currently in progress. If you leave, session data may be lost!";
+            };
+        },
+        clearEditorHandler: function () {
+            window.onbeforeunload = null;
+        }
+    };
+    </script>
 </body>
 
 </html>
