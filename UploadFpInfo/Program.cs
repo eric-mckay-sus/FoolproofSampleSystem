@@ -120,16 +120,16 @@ public class FPSheetUploader
 
             if (containsDuplicate)
             {
-                string[] duplicateNames = this.output.BatchResults.Where(fr => fr.hadDuplicates).Select(fr => GetFileName(fr.model)).ToArray();
-                string report = string.Join(", ", duplicateNames);
-                await this.Report($"The following files contain duplicate entries: {report}. If you wish to update, do so manually. Otherwise, no action is required.", ReportLevel.WARNING);
+                string[] duplicateNames = this.output.BatchResults.Where(fr => fr.hadDuplicates).Select(fr => GetFileName(fr.file)).ToArray();
+                string report = string.Join("\n\t", duplicateNames);
+                await this.Report($"The following files contain duplicate entries:\n\t{report}\nIf you wish to update, do so manually. Otherwise, no action is required.", ReportLevel.WARNING);
             }
 
             if (containsMiscError)
             {
-                string[] miscNames = this.output.BatchResults.Where(fr => fr.hadErrors).Select(fr => GetFileName(fr.model)).ToArray();
-                string report = string.Join(", ", miscNames);
-                await this.Report($"The following files contain miscellaneous errors: {report}. Please investigate them to verify why they could not upload.", ReportLevel.ERROR);
+                string[] miscNames = this.output.BatchResults.Where(fr => fr.hadErrors).Select(fr => GetFileName(fr.file)).ToArray();
+                string report = string.Join("\n\t", miscNames);
+                await this.Report($"The following files contain miscellaneous errors:\n{report}\nPlease investigate them to verify why they could not upload.", ReportLevel.ERROR);
             }
 
             if (containsDuplicate || containsMiscError)
@@ -435,7 +435,7 @@ public class FPSheetUploader
         while (true)
         {
             await this.Report($"{(isNewModel ? "[NEW]" : "[REPEAT]")} {filename}\n", ReportLevel.IMPORTANT);
-            Report modelPrompt = new ("\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
+            Report modelPrompt = new ($"\tPlease enter the C. Core model name for the contents to be imported (or type 'SKIP' to proceed to the next file):");
             model = (await this.input.GetInputAsync(modelPrompt, error)).Trim();
 
             if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
@@ -457,7 +457,7 @@ public class FPSheetUploader
             // This inner loop controls redirects to the column prompt (i.e. bad column )
             while (true)
             {
-                string colPrompt = $"\t[{model}] Enter Excel column name (BM-CJ), 'R' to change model, or ENTER for no filter:";
+                string colPrompt = $"\t[{model}] Enter Excel column name BM-CJ ('R' to change model, or ENTER for no filter):";
                 string filterColumnName = (await this.input.GetInputAsync(new (colPrompt), error)).Trim();
 
                 if (filterColumnName.Equals("R", StringComparison.OrdinalIgnoreCase))
@@ -489,6 +489,7 @@ public class FPSheetUploader
 
     /// <summary>
     /// Creates a report and passes it to the output provider.
+    /// Enclose console-specific information in parentheses for Blazor to hide it.
     /// </summary>
     /// <param name="msg">The message to report.</param>
     /// <param name="level">The message's report level.</param>

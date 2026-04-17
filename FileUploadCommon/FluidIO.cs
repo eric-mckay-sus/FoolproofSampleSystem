@@ -410,10 +410,10 @@ public class BlazorReporter : IOutputProvider
     public IList<Report> Logs { get; private set; } = [];
 
     /// <summary>
-    /// Gets the underlying DataTable object that stores the preview information.
+    /// Gets or sets the underlying DataTable object that stores the preview information.
     /// It is important that Blazor persists this so it has concrete data during another upload.
     /// </summary>
-    public DataTable? CurrentPreview { get; private set; }
+    public DataTable? CurrentPreview { get; set; }
 
     /// <summary>
     /// Sets <see cref="CurrentFileName"/> to <paramref name="name"/>, then notifies Blazor.

@@ -5,10 +5,12 @@
 namespace SampleManagement.Components.Pages;
 
 using System.Data;
+using Regex = System.Text.RegularExpressions.Regex;
 using FileUploadCommon;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using UploadFpInfo;
+using Microsoft.EntityFrameworkCore;
 
 /// <summary>
 /// Code-behind for the FPSheet page.
@@ -21,14 +23,24 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private readonly IList<IBrowserFile> selectedFiles = [];
 
     /// <summary>
-    /// The current input/confirmation prompt from <see cref="UploadPageBase{T}.InputProvider"/>.
+    /// The list of all models (for autofill on model prompt).
     /// </summary>
-    private Report? currentPrompt;
+    private IList<string> availableModels = [];
+
+    /// <summary>
+    /// The current input/confirmation message from <see cref="UploadPageBase{T}.InputProvider"/>.
+    /// </summary>
+    private string? currentPrompt;
 
     /// <summary>
     /// The error displayed underneath the input box, if applicable.
     /// </summary>
     private string? inputError;
+
+    /// <summary>
+    /// Gets a value indicating whether the current prompt is for model name (or Excel column).
+    /// </summary>
+    private bool IsModelPrompt => this.currentPrompt != null && this.currentPrompt.Contains("C. Core");
 
     /// <summary>
     /// When this page loads, wire the input provider's confirmation and user input events to auto-open an alert (with flag).
@@ -40,14 +52,14 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         // Link the input provider events to this component's state
         this.InputProvider.OnConfirmationRequested += async (prompt) =>
         {
-            this.currentPrompt = prompt;
+            this.currentPrompt = prompt.message;
             this.IsAwaitingConfirmation = true;
             await this.InvokeAsync(this.StateHasChanged);
         };
 
         this.InputProvider.OnInputRequested += async (prompt, error) =>
         {
-            this.currentPrompt = prompt;
+            this.currentPrompt = ParenthesesClipper().Replace(prompt.message, string.Empty).Trim();
             this.inputError = error;
             this.UserInputText = string.Empty;
             this.IsAwaitingInput = true;
@@ -72,6 +84,11 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             };
             this.InvokeAsync(this.StateHasChanged);
         };
+
+        using (FPSampleDbContext context = this.DbFactory.CreateDbContext())
+        {
+            this.availableModels = await context.ModelToLine.Select(m => m.ShortDescription).Distinct().ToListAsync();
+        }
 
         this.CurrentSortColumn = "IssueDate";
         this.SortDir = "descending";
@@ -111,6 +128,9 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     /// <inheritdoc/>
     /// </summary>
     protected override void OnUploadCleanup() => this.selectedFiles.Clear();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@" \(.*?\)")]
+    private static partial Regex ParenthesesClipper();
 
     /// <summary>
     /// Converts the DataTable from the Reporter into a list of DTOs for the UniversalTable.
@@ -207,6 +227,16 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     }
 
     /// <summary>
+    /// Helper to be called by the skip button.
+    /// </summary>
+    /// <param name="newInput">The input to send to the input provider.</param>
+    private void SubmitUserInput(string newInput)
+    {
+        this.UserInputText = newInput;
+        this.SubmitUserInput();
+    }
+
+    /// <summary>
     /// Finishes the upload by dismissing logs, batch results, and resetting state flags.
     /// </summary>
     private void CloseUpload()
@@ -214,7 +244,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         this.Reporter.ClearLogs();
         this.Reporter.BatchResults.Clear();
 
-        // this.Reporter.CurrentPreview = null;
+        this.Reporter.CurrentPreview = null;
         this.IsUploading = false;
         this.ProgressPercent = 0;
         this.DisplayPercent = 0;

@@ -14,7 +14,7 @@
     <div class="expandable-wrapper @(selectedFiles.Any() && !IsUploading ? "is-expanded" : "")">
         <div class="expandable-content">
             <Alert Color="AlertColor.Info" Class="mt-3 animate-fade-in shadow-sm">
-                <p><strong>Files Selected for Upload:</strong>(@selectedFiles.Count)</p>
+                <p><strong>Files Selected for Upload </strong>(@selectedFiles.Count):</p>
                 <ul class="list-unstyled ms-3">
                     @foreach (IBrowserFile file in selectedFiles)
                     {
@@ -37,7 +37,7 @@
         </div>
     </div>
     @* File upload area and button *@
-    <div class="expandable-wrapper @(selectedFiles.Any() && !Reporter.BatchResults.Any() ? "" : "is-expanded")">
+    <div class="expandable-wrapper @(selectedFiles.Any() || IsUploading ? "" : "is-expanded")">
         <div class="expandable-content">
             <div class="centered-container">
                 <div class="upload-card @(IsDragging ? "drag-active" : "")">
@@ -73,7 +73,7 @@
         <div class="expandable-content">
             <Alert Color="AlertColor.Info" Class="mt-2 animate-fade-in">
                 <div class="d-flex flex-column">
-                    <label class="mb-2 fw-bold">@currentPrompt?.message</label>
+                    <label class="mb-2 fw-bold">@currentPrompt</label>
                     <div class="me-2">
                         <Button Color="ButtonColor.Success"
                                 Outline="true"
@@ -97,9 +97,9 @@
         <div class="expandable-content">
             <Alert Color="AlertColor.Info" Class="mt-3 shadow-sm border-primary">
                 <div class="d-flex flex-column">
-                    <label class="mb-2 fw-bold">@currentPrompt?.message</label>
+                    <label class="mb-2 fw-bold">@currentPrompt</label>
                     <div class="input-group me-2">
-                        <input id="model-input" type="text"
+                        <input id="model-input" type="text" list="@(IsModelPrompt ? "models" : string.Empty)"
                             class="form-control"
                             @bind="UserInputText"
                             @onkeyup="@(e => { if(e.Key == "Enter") SubmitUserInput(); })"
@@ -109,6 +109,27 @@
                     </div>
                     <label class="text-danger">@inputError</label>
                 </div>
+                @if (IsModelPrompt)
+                {
+                    <datalist id="models">
+                        @foreach (string m in availableModels)
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </datalist>
+                    <Button Color="ButtonColor.Secondary" Outline="true" Class="mt-2" @onclick='() => SubmitUserInput("skip")'>
+                        <Icon Name="IconName.SkipForwardFill"/> Skip this file
+                    </Button>
+                } else {
+                    <div class="me-2 mt-2">
+                        <Button Color="ButtonColor.Secondary" Outline="true" @onclick='() => SubmitUserInput("r")'>
+                            <Icon Name="IconName.ArrowCounterclockwise"/> Back to Model Name
+                        </Button>
+                        <Button Color="ButtonColor.Primary" @onclick='() => SubmitUserInput(string.Empty)'>
+                            <Icon Name="IconName.Table"/> Full Sheet
+                        </Button>
+                    </div>
+                }
             </Alert>
         </div>
     </div>
@@ -137,8 +158,8 @@
     </div>
 }
 
-@* Batch Summary Table - Appears after at least one file is processed *@
-@if (Reporter != null && Reporter.BatchResults.Any())
+@* Batch summary - Appears after entire batch is complete *@
+@if (Reporter != null && !IsUploading && Reporter.BatchResults.Any())
 {
     <div class="mt-4 mb-4 animate-fade-in">
         <div class="d-flex justify-content-between align-items-center mb-2">
