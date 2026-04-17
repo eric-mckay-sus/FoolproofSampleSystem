@@ -129,8 +129,8 @@ public class ModelMappingUploader
     /// Recommended entry point for other programs which use this one.
     /// </summary>
     /// <param name="filename">An optional file path to override the one found in config.</param>
-    /// <returns>A Task representing the upload completion (regardless of success).</returns>
-    public async Task ExecuteAsync(string? filename = null)
+    /// <returns>A Task representing whether the overwrite was confirmed or canceled.</returns>
+    public async Task<UploadResult> ExecuteAsync(string? filename = null)
     {
         string path = Config.GetInputLocation(isFP: false);
         if (string.IsNullOrWhiteSpace(filename))
@@ -156,7 +156,7 @@ public class ModelMappingUploader
             else if (!Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase))
             {
                 await this.Report($"The file you specified ({path}) is not a CSV. Please select a CSV file and try again.", ReportLevel.ERROR);
-                return;
+                return UploadResult.ErroredOut;
             }
 
             string connectionString = Config.GetConnectionString();
@@ -164,14 +164,16 @@ public class ModelMappingUploader
             bool confirmOverwrite = await this.input.GetConfirmAsync(new ($"WARNING: If successful, this action will overwrite the current model info database with the contents of {path}. Proceed?", ReportLevel.WARNING));
             if (!confirmOverwrite)
             {
-                return;
+                return UploadResult.Canceled;
             }
 
             await this.Upload(path, connectionString);
+            return UploadResult.Complete;
         }
         catch (Exception ex)
         {
             await this.Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
+            return UploadResult.ErroredOut;
         }
     }
 

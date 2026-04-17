@@ -9,7 +9,6 @@ using FileUploadCommon;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using UploadFpInfo;
-using ToastType = BlazorBootstrap.ToastType;
 
 /// <summary>
 /// Code-behind for the FPSheet page.
@@ -78,6 +77,40 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         this.SortDir = "descending";
         await base.OnInitializedAsync();
     }
+
+    /// <summary>
+    /// Executes the actual upload after validation is complete by staging the selected files, then passing their directory to the uploader for a batch (even with just one file).
+    /// </summary>
+    /// <returns>A Task representing the upload's completion status.</returns>
+    protected override async Task<UploadResult> ExecuteUpload()
+    {
+        // Improbable, but treat like a cancel
+        if (!this.selectedFiles.Any())
+        {
+            return UploadResult.Canceled;
+        }
+
+        foreach (IBrowserFile file in this.selectedFiles)
+        {
+            string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
+            string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
+
+            // Stream the file data from the element to the server
+            using (FileStream stream = new (filePath, FileMode.Create))
+            {
+                await file.OpenReadStream().CopyToAsync(stream);
+            }
+        }
+
+        await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
+        FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
+        return await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
+    }
+
+    /// <summary>
+    /// <inheritdoc/>
+    /// </summary>
+    protected override void OnUploadCleanup() => this.selectedFiles.Clear();
 
     /// <summary>
     /// Converts the DataTable from the Reporter into a list of DTOs for the UniversalTable.
@@ -171,70 +204,6 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         this.InputProvider.SetInputResult(this.UserInputText);
         this.UserInputText = string.Empty;
         this.StateHasChanged();
-    }
-
-    /// <summary>
-    /// Starts the upload by staging the selected files, then passing their directory to the uploader for a batch (even with just one file).
-    /// </summary>
-    /// <returns>A Task representing that the upload is complete.</returns>
-    private async Task StartUpload()
-    {
-        this.ProgressPercent = 5; // Preload to 'feel responsive'
-        await this.StartProgressSimulation(); // Use fake loading bar
-        if (!this.selectedFiles.Any())
-        {
-            return;
-        }
-
-        await Task.Delay(100); // allow dialog activity to finish before beginning
-
-        this.IsUploading = true;
-        this.Reporter.ClearLogs();
-        try
-        {
-            // The file content is read into a stream
-            if (this.selectedFiles.Any())
-            {
-                // Putting the upload in wwwroot works well from a file management standpoint, but will trigger dotnet watch's hot reload. dotnet run works fine.
-                Directory.CreateDirectory(this.UploadsFolderPath); // Ensure directory exists
-
-                foreach (IBrowserFile file in this.selectedFiles)
-                {
-                    string trustedFileName = $"{Path.GetFileNameWithoutExtension(file.Name)}_{DateTime.Now:yyyy-MM-dd}{Path.GetExtension(file.Name)}";
-                    string filePath = Path.Combine(this.UploadsFolderPath, trustedFileName);
-
-                    // Stream the file data from the element to the server
-                    using (FileStream stream = new (filePath, FileMode.Create))
-                    {
-                        await file.OpenReadStream().CopyToAsync(stream);
-                    }
-                }
-
-                await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
-                FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
-                await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
-                Report? match = this.Reporter.Logs.FirstOrDefault(r => r.level == ReportLevel.ERROR);
-                if (match != null)
-                {
-                    throw new Exception($"{match.message}. Please verify the contents of your file.");
-                }
-
-                this.ProgressPercent = 100; // Guarantee the progress bar made it all the way
-                await Task.Delay(750); // Make sure it's actually visible to the user for a moment
-                await this.RefreshData();
-                this.ToastService.Notify(new (ToastType.Success, "Foolproof sheets successfully uploaded!"));
-            }
-        }
-        catch (Exception ex)
-        {
-            this.ToastService.Notify(new (ToastType.Danger, $"\nUpload failed: {ex.Message}"));
-        }
-        finally
-        {
-            this.CleanupFileSystem();
-            await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
-            this.selectedFiles.Clear();
-        }
     }
 
     /// <summary>

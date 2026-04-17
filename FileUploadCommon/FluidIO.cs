@@ -64,6 +64,32 @@ public enum ProgressEvent
 }
 
 /// <summary>
+/// Denotes the status with which an upload finished.
+/// </summary>
+public enum UploadResult
+{
+    /// <summary>
+    /// The upload finished without any errors.
+    /// </summary>
+    Complete,
+
+    /// <summary>
+    /// The upload ran to completion with errors.
+    /// </summary>
+    CompleteWithErrors,
+
+    /// <summary>
+    /// The upload was canceled by the process because of a fatal error.
+    /// </summary>
+    ErroredOut,
+
+    /// <summary>
+    /// The upload was canceled by the user.
+    /// </summary>
+    Canceled,
+}
+
+/// <summary>
 /// The data packet used by I/O classes to track a file with its upload status
 /// </summary>
 /// <param name="file">The file containing the model.</param>

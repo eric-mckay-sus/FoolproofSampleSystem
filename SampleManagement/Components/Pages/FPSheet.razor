@@ -26,7 +26,7 @@
                 </ul>
                 <hr />
                 <div class="d-flex gap-2">
-                    <Button Color="ButtonColor.Success" @onclick="StartUpload">
+                    <Button Color="ButtonColor.Success" @onclick='async () => await Upload("Foolproof sheets successfully uploaded")'>
                         <Icon Name="IconName.CloudArrowUpFill" /> Proceed with Upload
                     </Button>
                     <Button Color="ButtonColor.Secondary" @onclick="CancelSelection">

@@ -78,8 +78,8 @@ public class FPSheetUploader
     /// Recommended entry point for other programs which use this one.
     /// </summary>
     /// <param name="filename">An optional file path to override the one found in config.</param>
-    /// <returns>A Task representing the upload completion (regardless of success).</returns>
-    public async Task ExecuteAsync(string? filename = null)
+    /// <returns>A Task representing the upload status.</returns>
+    public async Task<UploadResult> ExecuteAsync(string? filename = null)
     {
         // Main only checked that there was an argument, now we validate
         string path = Config.GetInputLocation(isFP: true);
@@ -109,9 +109,10 @@ public class FPSheetUploader
             {
                 (containsDuplicate, containsMiscError) = await this.ProcessFile(path);
             }
-            else
+            else // should never reach here unless the file is somehow deleted during the upload
             {
                 await this.Report($"Could not find {path}. Please verify the path is correct, then try again.");
+                return UploadResult.ErroredOut;
             }
 
             // Declare the upload as complete when the batch/file finishes
@@ -130,14 +131,25 @@ public class FPSheetUploader
                 string report = string.Join(", ", miscNames);
                 await this.Report($"The following files contain miscellaneous errors: {report}. Please investigate them to verify why they could not upload.", ReportLevel.ERROR);
             }
+
+            if (containsDuplicate || containsMiscError)
+            {
+                return UploadResult.CompleteWithErrors;
+            }
+            else
+            {
+                return UploadResult.Complete;
+            }
         }
         catch (FormatException f)
         {
             await this.Report($"Formatting error: {f.Message}", ReportLevel.ERROR);
+            return UploadResult.ErroredOut;
         }
         catch (Exception ex)
         {
             await this.Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
+            return UploadResult.ErroredOut;
         }
     }
 

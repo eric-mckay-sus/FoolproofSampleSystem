@@ -7,8 +7,6 @@ namespace SampleManagement.Components.Pages;
 using FileUploadCommon;
 using Microsoft.AspNetCore.Components.Forms;
 using UploadModelMappings;
-using Microsoft.JSInterop;
-using ToastType = BlazorBootstrap.ToastType;
 
 /// <summary>
 /// Code-behind for the ModelMappings page.
@@ -57,6 +55,35 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     }
 
     /// <summary>
+    /// Executes the the actual upload after validation is complete by staging the selected file, then passing its path to the uploader.
+    /// </summary>
+    /// <returns>A Task representing whether the upload completion status.</returns>
+    protected override async Task<UploadResult> ExecuteUpload()
+    {
+        // Improbable, but treat like a cancel
+        if (this.selectedFile == null)
+        {
+            return UploadResult.Canceled;
+        }
+
+        string extension = Path.GetExtension(this.selectedFile.Name);
+        string trustedFileName = $"model_line_mappings_{DateTime.Now:yyyy-MM-dd}";
+        this.filePath = Path.Combine(this.UploadsFolderPath, trustedFileName + extension);
+
+        // Stream the file data from the element to the server
+        using FileStream stream = new (this.filePath, FileMode.Create);
+        await this.selectedFile.OpenReadStream().CopyToAsync(stream);
+
+        ModelMappingUploader uploader = new (this.InputProvider, this.Reporter);
+        return await uploader.ExecuteAsync(this.filePath);
+    }
+
+    /// <summary>
+    /// <inheritdoc/>
+    /// </summary>
+    protected override void OnUploadCleanup() => this.selectedFile = null;
+
+    /// <summary>
     /// Set the selected file, with guard check to guarantee no visual flicker.
     /// </summary>
     /// <param name="e">The event representing file selection.</param>
@@ -73,7 +100,7 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         try
         {
             this.selectedFile = e.File;
-            await this.StartUpload();
+            await this.Upload("Model mappings successfully uploaded");
         }
         finally
         {
@@ -94,72 +121,6 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
         {
             this.selectedFile = null;
             this.IsUploading = false;
-        }
-    }
-
-    /// <summary>
-    /// Starts the upload by staging the selected file, then passing its path to the uploader.
-    /// </summary>
-    /// <returns>A Task representing that the upload is complete.</returns>
-    private async Task StartUpload()
-    {
-        if (this.IsUploading) // Don't allow another upload during this one
-        {
-            return;
-        }
-
-        this.ProgressPercent = 5; // Preload to 'feel responsive'
-        _ = this.StartProgressSimulation(); // Intentionally fire & forget the loading bar instead of awaiting; it manages itself and otherwise creates issues with the main thread freezing because of the while loop.
-        if (this.selectedFile == null)
-        {
-            return;
-        }
-
-        await Task.Delay(100); // allow dialog activity to finish before beginning
-
-        this.IsUploading = true;
-        this.Reporter.ClearLogs();
-        try
-        {
-            // The file content is read into a stream
-            if (this.selectedFile != null)
-            {
-                // Putting the upload in wwwroot works well from a file management standpoint, but will trigger dotnet watch's hot reload. dotnet run works fine.
-                Directory.CreateDirectory(this.UploadsFolderPath); // Ensure directory exists
-
-                string trustedFileName = $"model_line_mappings_{DateTime.Now:yyyy-MM-dd}";
-                this.filePath = Path.Combine(this.UploadsFolderPath, trustedFileName + Path.GetExtension(this.selectedFile.Name));
-
-                // Stream the file data from the element to the server
-                using (FileStream stream = new (this.filePath, FileMode.Create))
-                {
-                    await this.selectedFile.OpenReadStream().CopyToAsync(stream);
-                }
-
-                await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
-                ModelMappingUploader uploader = new (this.InputProvider, this.Reporter);
-                await uploader.ExecuteAsync(this.filePath);
-                Report? match = this.Reporter.Logs.FirstOrDefault(r => r.level == ReportLevel.ERROR);
-                if (match != null)
-                {
-                    throw new Exception($"{match.message}. Please verify the contents of your file.");
-                }
-
-                this.ProgressPercent = 100; // Guarantee the progress bar made it all the way
-                await Task.Delay(750); // Make sure it's actually visible to the user for a moment
-                await this.RefreshData();
-                this.ToastService.Notify(new (ToastType.Success, "Model mappings successfully uploaded!"));
-            }
-        }
-        catch (Exception ex)
-        {
-            this.ToastService.Notify(new (ToastType.Danger, $"\nUpload failed: {ex.Message}"));
-        }
-        finally
-        {
-            this.Dispose();
-            await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
-            this.selectedFile = null;
         }
     }
 }

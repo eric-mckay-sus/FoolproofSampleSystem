@@ -13,7 +13,7 @@ using Microsoft.JSInterop;
 /// Represents a generic upload page.
 /// </summary>
 /// <typeparam name="T"><inheritdoc/></typeparam>
-public class UploadPageBase<T> : TableManager<T>, IDisposable
+public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     where T : class
 {
     /// <summary>
@@ -187,6 +187,82 @@ public class UploadPageBase<T> : TableManager<T>, IDisposable
             this.ProgressTimer?.Dispose();
         }
     }
+
+    /// <summary>
+    /// The template method that handles the UI state and lifecycle of an upload.
+    /// </summary>
+    /// <param name="successMessage">The message to toast with on success.</param>
+    /// <returns>A Task signaling that the upload is complete and garbage has been collected.</returns>
+    protected async Task Upload(string successMessage)
+    {
+        if (this.IsUploading)
+        {
+            return;
+        }
+
+        this.ProgressPercent = 5;
+        _ = this.StartProgressSimulation();
+
+        // Let the UI breathe so the progress bar/spinner appears
+        await Task.Delay(100);
+
+        this.IsUploading = true;
+        this.Reporter.ClearLogs();
+
+        try
+        {
+            Directory.CreateDirectory(this.UploadsFolderPath);
+            await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
+
+            // Execute the specific logic passed from the child
+            UploadResult result = await this.ExecuteUpload();
+
+            switch (result)
+            {
+                case UploadResult.Complete:
+                    this.ProgressPercent = 100;
+                    await Task.Delay(750);
+                    await this.RefreshData();
+                    this.ToastService.Notify(new (ToastType.Success, $"{successMessage}!"));
+                    break;
+                case UploadResult.CompleteWithErrors:
+                    this.ProgressPercent = 100;
+                    await Task.Delay(750);
+                    await this.RefreshData();
+                    this.ToastService.Notify(new (ToastType.Warning, $"{successMessage} with errors. Check the summary table and log to see what didn't go through."));
+                    break;
+                case UploadResult.ErroredOut:
+                    Report? error = this.Reporter.Logs.FirstOrDefault();
+                    throw new Exception($"{error?.message ?? "There was an error that prevented your upload from completing"}. Please verify your file.");
+                case UploadResult.Canceled:
+                    this.ProgressPercent = 100;
+                    this.ToastService.Notify(new (ToastType.Secondary, "Upload canceled."));
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"\nUpload failed: {ex.Message}"));
+        }
+        finally
+        {
+            this.CleanupFileSystem();
+            await this.JS.InvokeVoidAsync("preventConfigurationLoss.clearEditorHandler");
+            this.OnUploadCleanup(); // Opening for children to clear their specific file lists
+            this.IsUploading = false;
+        }
+    }
+
+    /// <summary>
+    /// Overridden by children to clear their specific selectedFiles or selectedFile variables.
+    /// </summary>
+    /// <returns>A Task indicating the upload status.</returns>
+    protected abstract Task<UploadResult> ExecuteUpload();
+
+    /// <summary>
+    /// Overridden by children to clear their specific selectedFiles or selectedFile variables.
+    /// </summary>
+    protected abstract void OnUploadCleanup();
 
     /// <summary>
     /// When a file is dragged into the upload box, throw the drag flag.
