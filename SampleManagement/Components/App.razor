@@ -40,7 +40,28 @@
             const el = document.getElementById(elementId);
             if (el) {
                 // A tiny timeout helps if Blazor is still finishing the render
-                setTimeout(() => el.focus(), 20);
+                setTimeout(() => {
+                    el.focus();
+                    // If it's a datalist-linked input, trigger the dropdown
+                    if (el.getAttribute('list')) {
+                        // Dispatching an 'input' event forces the browser to re-evaluate and show the datalist.
+                        const event = new Event('input', { bubbles: true });
+                        el.dispatchEvent(event);
+
+                        // For Chromium, sometimes a click helps
+                        el.click();
+                    }
+                }, 20);
+            }
+        };
+    </script>
+
+    @* Script to scroll to the bottom of the DOM element with the input ID *@
+    <script>
+        window.scrollToBottom = (elementId) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.scrollTop = element.scrollHeight;
             }
         };
     </script>

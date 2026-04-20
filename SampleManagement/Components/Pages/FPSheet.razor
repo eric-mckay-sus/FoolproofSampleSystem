@@ -57,14 +57,34 @@
 </div>
 
 @* Log for errors/warnings *@
-@if(Reporter != null && Reporter.Logs.Any())
+@if (Reporter?.Logs.Any() == true)
 {
-    <Alert Color="AlertColor.Warning" Class="mt-3 shadow-sm border-primary" style="max-height: 300px; overflow-y: auto;">
-        @foreach(Report log in Reporter.Logs)
-        {
-            <div class="log-entry">@log.message</div>
-        }
-    </Alert>
+    <div class="expandable-container">
+        <Alert Color="AlertColor.Warning" Class="mt-3 shadow-sm border-primary">
+            <div @onclick="ToggleLog" style="cursor: pointer; padding: 0.75rem 1.25rem;"
+                 class="d-flex justify-content-between align-items-center bg-warning bg-opacity-10">
+                <span>
+                    <Icon Name="@(isLogExpanded ? IconName.ChevronDown : IconName.ChevronRight)" Class="me-2" />
+                    <strong>System Logs</strong>
+                    <span class="badge bg-dark ms-2">@Reporter.Logs.Count</span>
+                </span>
+                <span class="text-muted small">Click to @(isLogExpanded ? "collapse" : "expand")</span>
+            </div>
+
+            <div class="expandable-wrapper @(isLogExpanded ? "is-expanded" : "")">
+                <div class="expandable-content">
+                    <div id="log-container" class="log-container">
+                        @foreach (Report log in Reporter.Logs)
+                        {
+                            <div class="log-entry border-bottom border-light py-1">
+                                <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @log.message
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </Alert>
+    </div>
 }
 
 @* Confirmation alert for any confirmation from InputProvider *@
@@ -136,24 +156,48 @@
 </div>
 
 @* The loading bar, displayed in upload state when loading isn't yet complete *@
-@if (IsUploading && DisplayPercent != 100)
+@if (IsUploading && Reporter?.Progress is { } p)
 {
     <div class="centered-container mx-auto w-100">
         <div class="mt-3 w-50">
-            <div class="d-flex align-items-center justify-content-center mb-2" style="font-size: 1.5rem">
-                <div class="spinner-border text-primary me-2" role="status"></div>
-                <span>@CurrentDisplayStatus</span>
+            @* File counter *@
+            <div class="d-flex justify-content-between mb-1">
+                <span class="fw-semibold" style="font-size: 1.5rem">
+                    @p.CurrentFileName
+                    @if (p.IsRepeating)
+                    {
+                        <span class="badge bg-secondary ms-2">Pass @p.CurrentFilePass</span>
+                    }
+                </span>
+                <span class="text-muted">
+                    @p.FilesCompleted of @p.TotalFiles files
+                </span>
             </div>
-            <div class="progress mt-2" style="height: 30px">
-                <div class="progress-bar progress-bar-animated"
-                    role="progressbar"
-                    style="width: @((int)DisplayPercent)%; transition: width 0.1s linear;"
-                    aria-valuenow="@((int)DisplayPercent)"
-                    aria-valuemin="0"
-                    aria-valuemax="100">
-                    @((int)DisplayPercent)%
+
+            @* Determinate progress bar driven by file count, not percentage *@
+            <div class="progress" style="height: 20px">
+                @{ double pct = p.TotalFiles > 0
+                       ? (double)p.FilesCompleted / p.TotalFiles * 100
+                       : 0; }
+                <div class="progress-bar"
+                     role="progressbar"
+                     style="width: @((int)pct)%; transition: width 0.3s ease;"
+                     aria-valuenow="@p.FilesCompleted"
+                     aria-valuemin="0"
+                     aria-valuemax="@p.TotalFiles"
+                     aria-label="@p.FilesCompleted of @p.TotalFiles files processed">
+                    @p.FilesCompleted / @p.TotalFiles
                 </div>
             </div>
+
+            @* Spinner only while a file is actively being processed *@
+            @if (p.FilesCompleted < p.TotalFiles)
+            {
+                <div class="d-flex align-items-center mt-2 text-muted small">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    Processing...
+                </div>
+            }
         </div>
     </div>
 }

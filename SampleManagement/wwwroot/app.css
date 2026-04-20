@@ -368,3 +368,11 @@ h1:focus {
 .progress{
     color: hsl(210, 76%, 40%)
 }
+
+.log-container{
+    max-height: 250px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    padding: 10px;
+    border-radius: 4px;
+}

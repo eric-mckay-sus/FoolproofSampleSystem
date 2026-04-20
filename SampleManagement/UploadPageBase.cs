@@ -22,12 +22,6 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     private static readonly string SessionId = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// Gets or sets the environment in which this upload page runs.
-    /// </summary>
-    [Inject]
-    public IWebHostEnvironment Environment { get; set; } = default!;
-
-    /// <summary>
     /// Gets or sets this upload page's input provider.
     /// </summary>
     [Inject]
@@ -48,7 +42,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     /// <summary>
     /// Gets the path of the uploads folder for this session.
     /// </summary>
-    protected string UploadsFolderPath => Path.Combine(this.Environment.WebRootPath, "uploads", SessionId);
+    protected string UploadsFolderPath => Path.Combine(Path.GetTempPath(), "uploads", SessionId);
 
     /// <summary>
     /// Gets or sets a value indicating whether the user is dragging a file over the file input location.
@@ -108,7 +102,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     /// <summary>
     /// When this component unloads, unload the timer and its cancellation token.
     /// </summary>
-    public void Dispose()
+    public virtual void Dispose()
     {
         // Fire the CancellationToken, dispose immediately
         this.TimerCts?.Cancel();
@@ -166,12 +160,15 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
                 // Move 10% of the remaining distance to the target each tick
                 double diff = this.ProgressPercent - this.DisplayPercent;
 
-                if (diff > 0.1) // Standard elastic progress
+                // Standard elastic progress
+                if (diff > 0.1)
                 {
                     this.DisplayPercent += diff * 0.15; // this factor is the elasticity parameter
                     await this.InvokeAsync(this.StateHasChanged);
                 }
-                else if (this.ProgressPercent > 95 && diff < 5) // Finished, jump to end
+
+                // Finished, jump to end
+                else if (this.ProgressPercent > 95 && diff < 5)
                 {
                     this.DisplayPercent = 100;
                     await this.InvokeAsync(this.StateHasChanged);

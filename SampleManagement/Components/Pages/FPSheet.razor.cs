@@ -38,9 +38,29 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private string? inputError;
 
     /// <summary>
+    /// Tracks whether the verbose error log is expanded.
+    /// </summary>
+    private bool isLogExpanded = false;
+
+    /// <summary>
+    /// Debounce for the verbose error log to avoid excessive re-renders.
+    /// </summary>
+    private CancellationTokenSource? logDebounce;
+
+    /// <summary>
     /// Gets a value indicating whether the current prompt is for model name (or Excel column).
     /// </summary>
     private bool IsModelPrompt => this.currentPrompt != null && this.currentPrompt.Contains("C. Core");
+
+    /// <summary>
+    /// When this page is closed, dispose as defined by the parent, then clean up the debounce cancellation token.
+    /// </summary>
+    public override void Dispose()
+    {
+        base.Dispose();
+        this.logDebounce?.Cancel();
+        this.logDebounce?.Dispose();
+    }
 
     /// <summary>
     /// When this page loads, wire the input provider's confirmation and user input events to auto-open an alert (with flag).
@@ -64,25 +84,48 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
             this.UserInputText = string.Empty;
             this.IsAwaitingInput = true;
             await this.InvokeAsync(this.StateHasChanged);
-            await Task.Delay(100);
-            await this.JS.InvokeVoidAsync("focusElement", "model-input");
+            try
+            {
+                await Task.Delay(100);
+                await this.JS.InvokeVoidAsync("focusElement", "model-input");
+            }
+            catch (OperationCanceledException)
+            {
+                // This exception is always thrown when a CancellationToken is used
+            }
+            catch (JSDisconnectedException)
+            {
+                // This exception is common when dealing with asynchronous JS interop
+            }
         };
 
         // Do the same for the output provider events
-        this.Reporter.OnNotify += () => this.InvokeAsync(this.StateHasChanged);
-
-        this.Reporter.OnProgress += (ev) =>
+        this.Reporter.OnNotify += async () =>
         {
-            this.CurrentDisplayStatus = this.Reporter.CurrentFileName;
-            this.ProgressPercent = ev switch
+            this.logDebounce?.Cancel();
+            this.logDebounce = new ();
+            CancellationToken token = this.logDebounce.Token;
+            try
             {
-                ProgressEvent.FileStarted => Math.Min(95, this.ProgressPercent + (95 / (this.selectedFiles.Count * 2))),
-                ProgressEvent.FileSkipped => Math.Min(95, this.ProgressPercent + (95 / (this.selectedFiles.Count * 2))),
-                ProgressEvent.FileCompleted => Math.Min(95, this.ProgressPercent + (95 / (this.selectedFiles.Count * 2))),
-                ProgressEvent.UploadComplete => 100,
-                _ => this.ProgressPercent
-            };
-            this.InvokeAsync(this.StateHasChanged);
+                await Task.Delay(100, token);
+
+                await this.InvokeAsync(this.StateHasChanged);
+
+                if (this.Reporter.Logs.Any())
+                {
+                    // Small delay ensures the DOM has rendered the new <div> before scrolling
+                    await Task.Delay(10);
+                    await this.JS.InvokeVoidAsync("scrollToBottom", "log-container");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // This exception is always thrown when a CancellationToken is used
+            }
+            catch (JSDisconnectedException)
+            {
+                // This exception is common when dealing with asynchronous JS interop
+            }
         };
 
         using (FPSampleDbContext context = this.DbFactory.CreateDbContext())
@@ -120,6 +163,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         }
 
         await this.JS.InvokeVoidAsync("preventConfigurationLoss.setEditorHandler");
+        this.Reporter.InitializeProgress(this.selectedFiles.Count);
         FPSheetUploader uploader = new (this.InputProvider, this.Reporter);
         return await uploader.ExecuteAsync(this.UploadsFolderPath); // Batch it even when only one file (for simplicity)
     }
@@ -193,6 +237,14 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
         {
             this.IsProcessingSelection = false;
         }
+    }
+
+    /// <summary>
+    /// Inverts the expansion state of the verbose error log.
+    /// </summary>
+    private void ToggleLog()
+    {
+        this.isLogExpanded = !this.isLogExpanded;
     }
 
     /// <summary>

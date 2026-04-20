@@ -109,7 +109,9 @@ public class FPSheetUploader
             {
                 (containsDuplicate, containsMiscError) = await this.ProcessFile(path);
             }
-            else // should never reach here unless the file is somehow deleted during the upload
+
+            // should never reach here unless the file is somehow deleted during the upload
+            else
             {
                 await this.Report($"Could not find {path}. Please verify the path is correct, then try again.");
                 return UploadResult.ErroredOut;
@@ -339,6 +341,11 @@ public class FPSheetUploader
         // Start the loop for applying multiple filters (run at least once)
         do
         {
+            if (!isNewFile)
+            {
+                await this.output.ReportProgress(ProgressEvent.FileRepeated);
+            }
+
             (string model, bool isFiltering, int targetColIndex) = await this.CollectUserInput(GetFileName(excelPath), isNewFile);
             if (model.Equals("SKIP", StringComparison.OrdinalIgnoreCase))
             {
