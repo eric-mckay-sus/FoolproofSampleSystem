@@ -6,11 +6,12 @@ namespace UploadFpInfo;
 
 using System.Data;
 using Microsoft.Data.SqlClient;
-using NPOI.HSSF.UserModel;
-using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;
+using NPOI.HSSF.UserModel; // for older XLS files
+using NPOI.SS.UserModel; // for generic spreadsheet manipulation
+using NPOI.XSSF.UserModel; // for newer XLSX files
 
-using static UploadFpInfo.FPUploadUtilities; // static allows its methods to be accessed later without qualification
+using static FPUploadUtilities; // static allows its methods to be accessed later without qualification
+using FileUploadCommon;
 
 /// <summary>
 /// Consolidates the parse/upload process for foolproof dummy sample sheets
@@ -57,7 +58,7 @@ public class FPSheetUploader
     /// <returns>A Task representing the completion of the program.</returns>
     public static async Task Main(string[] args)
     {
-        // If there was an input location argument, pass it along
+        // If there was an input location argument, pass it along (no validation here)
         string? potentialFile = null;
         if (args.Length > 0)
         {
@@ -67,7 +68,7 @@ public class FPSheetUploader
         // Exit static by creating an uploader
         FPSheetUploader uploader = new ();
 
-        // Defaults to the input location in config
+        // Then give it the green light
         await uploader.ExecuteAsync(potentialFile);
     }
 
@@ -79,11 +80,11 @@ public class FPSheetUploader
     /// <returns>A Task representing the upload completion (regardless of success).</returns>
     public async Task ExecuteAsync(string? filename = null)
     {
-        // Need to perform this check again because
-        string path = Config.InputLocation;
+        // Main only checked that there was an argument, now we validate
+        string path = Config.GetInputLocation(isFP: true);
         if (string.IsNullOrWhiteSpace(filename))
         {
-            await this.Report($"No file argument detected. Defaulting to config file input location ({Config.InputLocation})\n");
+            await this.Report($"No file specified. Defaulting to config file input location ({path})\n");
         }
         else
         {
@@ -99,7 +100,7 @@ public class FPSheetUploader
         {
             if (!Path.Exists(path))
             {
-                await this.Report($"Path '{path}' is not a valid directory or Excel file. Using Config default ({Config.InputLocation}).\n", ReportLevel.WARNING);
+                await this.Report($"Path '{filename}' is not a valid directory or Excel file. Using Config default ({path}).\n", ReportLevel.WARNING);
             }
             else if (Directory.Exists(path))
             {
@@ -224,7 +225,7 @@ public class FPSheetUploader
             return (false, false);
         }
 
-        await this.Report($"Found {files.Length} files. Starting upload to {Config.DbName}...\n");
+        await this.Report($"Found {files.Length} files. Starting upload to database...\n");
 
         bool currentContainsDuplicate = false;
         bool currentContainsMisc = false;
@@ -423,6 +424,11 @@ public class FPSheetUploader
         }
     }
 
-    // Creates a report and passes it on to the Progress instance
+    /// <summary>
+    /// Creates a report and passes it to the output provider.
+    /// </summary>
+    /// <param name="msg">The message to report.</param>
+    /// <param name="level">The message's report level.</param>
+    /// <returns>A Task representing that the report has been displayed to the user.</returns>
     private async Task Report(string msg, ReportLevel level = ReportLevel.INFO) => await this.output.ReportAsync(new (msg, level));
 }

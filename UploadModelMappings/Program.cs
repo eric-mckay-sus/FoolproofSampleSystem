@@ -9,7 +9,8 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using CsvHelper.Configuration.Attributes;
 using Microsoft.Data.SqlClient;
-using ENV = Environment;
+
+using FileUploadCommon;
 
 /// <summary>
 /// A mappable DTO to contain the information associated with a model
@@ -69,8 +70,39 @@ public sealed class ModelInfoMap : ClassMap<ModelInfo>
 /// A CSV parser to get the current models and lines on which they are run.
 /// Upon successful parsing, replaces the current dataset in the DB.
 /// </summary>
-public class UploadModelsToDb
+public class ModelMappingUploader
 {
+    /// <summary>
+    /// Determines where user input comes from.
+    /// </summary>
+    private readonly IInputProvider input;
+
+    /// <summary>
+    /// Determines where/how program output is displayed.
+    /// </summary>
+    private readonly IReportOutputProvider output;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ModelMappingUploader"/> class.
+    /// By default, uses the console for input and output.
+    /// </summary>
+    public ModelMappingUploader()
+    {
+        this.input = new ConsoleInputProvider();
+        this.output = new ConsoleReporter();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ModelMappingUploader"/> class, using the specified input and output providers.
+    /// </summary>
+    /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding model mapping details.</param>
+    /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
+    public ModelMappingUploader(IInputProvider inputProvider, IReportOutputProvider outputProvider)
+    {
+        this.input = inputProvider;
+        this.output = outputProvider;
+    }
+
     /// <summary>
     /// Entry point for the program. Parses the entire file for mappings and adds them all to the database.
     /// </summary>
@@ -78,80 +110,78 @@ public class UploadModelsToDb
     /// <returns>A Task representing the completion of this program.</returns>
     public static async Task Main(string[] args)
     {
-        if (args.Length == 0)
+        // If there was an input location argument, pass it along (no validation here)
+        string? potentialFile = null;
+        if (args.Length > 0)
         {
-            ErrorOut("No file argument detected. Please retry and supply path for file from which to harvest line mappings.");
+            potentialFile = args[0];
         }
 
-        string file = args[0];
-        if (!File.Exists(file))
-        {
-            ErrorOut($"The file you specified ({file}) could not be found. Please check your spelling and try again. The path may be relative to this program or absolute.");
-        }
+        // Exit static by creating an uploader
+        ModelMappingUploader uploader = new ();
 
-        if (!Path.GetExtension(file).Equals(".csv", StringComparison.OrdinalIgnoreCase))
-        {
-            ErrorOut($"The file you specified ({file}) is not a CSV. Please select a CSV file and try again.");
-        }
-
-        string? server = ENV.GetEnvironmentVariable("DB_SERVER"), user = ENV.GetEnvironmentVariable("DB_USER"), password = ENV.GetEnvironmentVariable("DB_PASS"), name = ENV.GetEnvironmentVariable("DB_NAME");
-
-        if (string.IsNullOrWhiteSpace(server) || string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(name))
-        {
-            ErrorOut("One or more environment variables for database connection are missing. Please reload your terminal (or its context) and try again.");
-        }
-
-        var builder = new SqlConnectionStringBuilder
-        {
-            DataSource = server,
-            UserID = user,
-            Password = password,
-            InitialCatalog = name,
-            TrustServerCertificate = true, // TODO insecure, eventually require certificate verification
-        };
-
-        Console.WriteLine($"WARNING: If successful, this action will overwrite the current model info database with the contents of {file}. Proceed? (y/n)");
-
-        string userConfirmation = Console.ReadLine() ?? string.Empty;
-
-        if (!userConfirmation.Equals("y", StringComparison.OrdinalIgnoreCase))
-        {
-            return; // default to cancel if user does not input y or Y
-        }
-
-        var consoleProgress = new Progress<string>(msg => Console.Write(msg));
-        await Upload(file, builder.ConnectionString, consoleProgress);
+        // Then give it the green light
+        await uploader.ExecuteAsync(potentialFile);
     }
 
     /// <summary>
-    /// Prints the specified string to standard output in red, then exits the program.
+    /// Identifies input location, verifies that it is a file, then delegates to the upload handler.
+    /// Recommended entry point for other programs which use this one.
     /// </summary>
-    /// <param name="toPrint">The string to print.</param>
-    private static void ErrorOut(string toPrint)
+    /// <param name="filename">An optional file path to override the one found in config.</param>
+    /// <returns>A Task representing the upload completion (regardless of success).</returns>
+    public async Task ExecuteAsync(string? filename = null)
     {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine(toPrint);
-        Console.ResetColor();
-        ENV.Exit(-1);
+        string path = Config.GetInputLocation(isFP: false);
+        if (string.IsNullOrWhiteSpace(filename))
+        {
+            await this.Report($"No file specified. Defaulting to config file input location ({path})\n");
+        }
+        else
+        {
+            path = filename;
+        }
+
+        // Path validation
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                await this.Report($"Path '{filename}' is a directory, which is not supported by this uploader. Using Config default ({path}).\n", ReportLevel.WARNING);
+            }
+            else if (!File.Exists(path))
+            {
+                await this.Report($"Path '{filename}' could not be found. Using Config default ({path}).\n", ReportLevel.WARNING);
+            }
+            else if (!Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                await this.Report($"The file you specified ({path}) is not a CSV. Please select a CSV file and try again.", ReportLevel.ERROR);
+                return;
+            }
+
+            string connectionString = Config.GetConnectionString();
+
+            bool confirmOverwrite = await this.input.GetConfirmAsync(new ($"WARNING: If successful, this action will overwrite the current model info database with the contents of {path}. Proceed?", ReportLevel.WARNING));
+            if (!confirmOverwrite)
+            {
+                return;
+            }
+
+            await this.Upload(path, connectionString);
+        }
+        catch (Exception ex)
+        {
+            await this.Report($"Fatal error: {ex.Message}", ReportLevel.ERROR);
+        }
     }
 
     /// <summary>
     /// Uploads the CSV file at filepath to the database.
     /// </summary>
     /// <param name="filepath">The path of the CSV to upload.</param>
-    /// <param name="connectionString">The DB conneciton string.</param>
-    /// <param name="progress">The IProgress implementation to which the progress should be reported.</param>
-    private static async Task Upload(string filepath, string connectionString, IProgress<string>? progress = null)
+    /// <param name="connectionString">The DB connection string.</param>
+    private async Task Upload(string filepath, string connectionString)
     {
-        // Called as a conditional Console.Write
-        void Report(string msg) => progress?.Report(msg);
-
-        if (!Path.GetExtension(filepath).Equals(".csv", StringComparison.OrdinalIgnoreCase))
-        {
-            Report("The file you provided is not a CSV. Please ensure the input file is of the correct filetype and format, then try again");
-            return;
-        }
-
         // The layers of wrapping are kind of disgusting, but we need an open StreamReader to create a CsvReader
         // The CsvReader gives us access to CsvDataReader to stream from the table (to the SqlBulkCopy)
         using StreamReader reader = new (filepath);
@@ -159,11 +189,11 @@ public class UploadModelsToDb
         csv.Context.RegisterClassMap<ModelInfoMap>();
         using CsvDataReader dr = new (csv);
 
-        Report("Connecting...");
+        await this.Report("Connecting...");
         using SqlConnection connection = new (connectionString);
         await connection.OpenAsync();
         using SqlTransaction transaction = connection.BeginTransaction();
-        Report("Connected!\n");
+        await this.Report("Connected!\n");
 
         try
         {
@@ -173,18 +203,27 @@ public class UploadModelsToDb
                 deleteCommand.ExecuteNonQuery();
             }
 
-            Report("Uploading...");
+            await this.Report("Uploading...");
             using SqlBulkCopy bulkCopy = new (connection, SqlBulkCopyOptions.Default, transaction);
             bulkCopy.DestinationTableName = "ModelToLine";
+
+            // This looks like RBAR, but it's really just an abstraction
             await bulkCopy.WriteToServerAsync(dr);
             await transaction.CommitAsync();
-            Report("Complete!");
+            await this.Report("Complete!", ReportLevel.SUCCESS);
         }
         catch (Exception ex)
         {
             transaction.Rollback();
-            Report($"Bulk Copy Error: {ex.Message}\n");
-            throw; // so the caller knows it failed
+            await this.Report($"Bulk Copy Error: {ex.Message}\n", ReportLevel.ERROR);
         }
     }
+
+    /// <summary>
+    /// Creates a report and passes it to the output provider.
+    /// </summary>
+    /// <param name="msg">The message to report.</param>
+    /// <param name="level">The message's report level.</param>
+    /// <returns>A Task representing that the report has been displayed to the user.</returns>
+    private async Task Report(string msg, ReportLevel level = ReportLevel.INFO) => await this.output.ReportAsync(new (msg, level));
 }

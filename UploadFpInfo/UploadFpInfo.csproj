@@ -18,4 +18,8 @@
     <AdditionalFiles Include="../stylecop.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\FileUploadCommon\FileUploadCommon.csproj" />
+  </ItemGroup>
+
 </Project>

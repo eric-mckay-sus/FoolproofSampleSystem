@@ -1,7 +1,7 @@
 // <copyright file="ConsoleExtensions.cs" company="Stanley Electric US Co. Inc.">
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
-namespace UploadFpInfo;
+namespace FileUploadCommon;
 
 /// <summary>
 /// Holds all extension methods applicable to reports to the console.

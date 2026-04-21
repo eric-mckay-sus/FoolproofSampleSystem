@@ -1,4 +1,4 @@
-// <copyright file="ETLUtilities.cs" company="Stanley Electric US Co. Inc.">
+// <copyright file="NpoiEtlUtilities.cs" company="Stanley Electric US Co. Inc.">
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
@@ -9,10 +9,12 @@ using System.Globalization;
 using System.Data;
 using System.Text.RegularExpressions;
 
+using FileUploadCommon;
+
 /// <summary>
 /// Contains utility methods for pre-FP upload parsing.
 /// </summary>
-internal static partial class FPUploadUtilities
+public static partial class FPUploadUtilities
 {
     /// <summary>
     /// Dynamically maps header names to indices (reads all entries in header row).

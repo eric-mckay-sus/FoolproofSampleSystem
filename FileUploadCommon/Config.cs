@@ -2,20 +2,15 @@
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
-namespace UploadFpInfo;
+namespace FileUploadCommon;
 
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 
 /// <summary>
-/// A container for the data that is constant in UploadFpInfo (but could change).
+/// A container for the data that is constant in both upload classes (but could change).
 /// </summary>
-internal static class Config
+public static class Config
 {
-    /// <summary>
-    /// Gets or sets the folder that contains the .xlsx / .xls files to process.
-    /// </summary>
-    public static string InputLocation { get; set; } = @"P:\PE III\1-Standard Documents\FPM\+++SHEETS FOR DATABASE TESTING";
-
     /// <summary>
     /// Gets the (0-based) worksheet to read from each workbook.
     /// </summary>
@@ -54,22 +49,38 @@ internal static class Config
     public static int EmptyRowLimit { get; } = 5;
 
     /// <summary>
-    /// Gets the database name from the environment variable.
+    /// Gets the file/folder that contains the file(s) to process.
     /// </summary>
-    public static string DbName => Environment.GetEnvironmentVariable("DB_NAME") ?? "ProductionDB";
+    /// <param name="isFP">Whether to get the input location for the foolproof sheets (or model mappings).</param>
+    /// <returns>The input location fot the desired data.</returns>
+    public static string GetInputLocation(bool isFP) => isFP ?
+        @"P:\PE III\1-Standard Documents\FPM\+++SHEETS FOR DATABASE TESTING" :
+        @"C:\LOCAL NETWORK FILES\testModelMappings.csv";
 
     /// <summary>
     /// Gets the connection string for the database whose credentials are stored in environment variables.
     /// </summary>
     /// <returns>A SQL Server connection string for access to the database.</returns>
+    /// <throws>InvalidOperationException when there are missing environment variable(s).</throws>
     public static string GetConnectionString()
     {
-        var builder = new StringBuilder
+        static string GetRequired(string key)
         {
-            DataSource = Environment.GetEnvironmentVariable("DB_SERVER"),
-            UserID = Environment.GetEnvironmentVariable("DB_USER"),
-            Password = Environment.GetEnvironmentVariable("DB_PASS"),
-            InitialCatalog = DbName,
+            string? value = Environment.GetEnvironmentVariable(key);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException($"Required environment variable '{key}' is missing for database connection.");
+            }
+
+            return value;
+        }
+
+        StringBuilder builder = new ()
+        {
+            DataSource = GetRequired("DB_SERVER"),
+            UserID = GetRequired("DB_USER"),
+            Password = GetRequired("DB_PASS"),
+            InitialCatalog = GetRequired("DB_NAME"),
             TrustServerCertificate = true,
         };
         return builder.ConnectionString;
