@@ -12,156 +12,222 @@ using Microsoft.Data.SqlClient;
 using System.Threading.Tasks;
 
 /// <summary>
+/// A DTO for the upload/print information required by <see cref="Program.ExecuteAsync"/>.
+/// </summary>
+public record ZplCommand
+{
+    /// <summary>
+    /// Gets or sets a value indicating whether upload mode is engaged.
+    /// </summary>
+    public bool IsUpload { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether print mode is engaged.
+    /// </summary>
+    public bool IsPrint { get; set; }
+
+    /// <summary>
+    /// Gets or sets print mode's sample ID.
+    /// </summary>
+    public int? SampleId { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the path on this machine of the ZPL file to be uploaded.
+    /// Always check <see cref="IsUpload"/> before accessing to verify validity.
+    /// </summary>
+    public string UploadPath { get; set; } = Config.UploadPath;
+
+    /// <summary>
+    /// Gets or sets the path on the printer of the ZPL file to be printed.
+    /// Always check <see cref="IsPrint"/> before accessing to verify validity.
+    /// </summary>
+    public string PrintPath { get; set; } = Config.PrintPath;
+}
+
+/// <summary>
 /// A simple test program to connect to a ZPL printer and upload a template to the printer or print a sample by ID.
 /// </summary>
 public class Program
 {
     /// <summary>
-    /// Application entry point.
+    /// Application entry point. Parses command-line input for mode, filename, and sample to print, then delegates to <see cref="ExecuteAsync"/> to upload/print.
     /// </summary>
     /// <param name="args">The command line arguments specifying whether to upload, print, or both (and which file/sample ID).</param>
     /// <returns>A Task representing program completion.</returns>
     public static async Task Main(string[] args)
     {
-        // The program requires at least one argument
+        // The program requires at least one argument (mode keyword)
         if (args.Length == 0)
         {
-            ShowUsage();
+            Console.WriteLine("Usage: dotnet run <UPLOAD|PRINT|UPLOAD-PRINT> [sample ID] [computer_path.zpl] [printer_path.zpl]");
             return;
         }
 
         // Immediately identify and verify the first argument (must be upload or print)
+        ZplCommand parsed = new ();
         string modeArg = args[0].ToUpper();
-        bool isUpload = modeArg.Contains("UPLOAD");
-        bool isPrint = modeArg.Contains("PRINT");
+        parsed.IsUpload = modeArg.Contains("UPLOAD");
+        parsed.IsPrint = modeArg.Contains("PRINT");
 
         // If the first argument doesn't specify upload/print, cut it off early
-        if (!(isUpload || isPrint))
+        if (!(parsed.IsUpload || parsed.IsPrint))
         {
-            ShowUsage();
+            Console.WriteLine("Usage: dotnet run <UPLOAD|PRINT|UPLOAD-PRINT> [sample ID] [computer_path.zpl] [printer_path.zpl]");
             return;
         }
 
-        // Create a list from the array to consume remaining arguments
-        List<string> remainingArgs = [.. args.Skip(1)];
-        string fileName = Config.InputLocation;
-        int sampleId = -1;
+        // The mode keyword is accounted for now, so we skip it. We build a queue to process further argument
+        Queue<string> argQueue = new (args.Skip(1));
 
-        // By only consuming the next argument if in print mode, we guarantee the last one is the filename (if present)
-        if (isPrint)
+        // By only popping the next argument if in print mode, we guarantee the last one is the filename (if present)
+        if (parsed.IsPrint)
         {
-            if (remainingArgs.Count == 0)
+            // Assume that if the second argument is a path on this machine, the user intended it to be the file to upload/print
+            if (!argQueue.TryDequeue(out string? idString) || Path.Exists(idString))
             {
                 Console.WriteLine("PRINT mode requires a sample ID argument.");
-                ShowUsage();
+                Console.WriteLine($"Usage: dotnet run <UPLOAD|PRINT|UPLOAD-PRINT> <sample ID> {(parsed.IsPrint ? "[computer_path.zpl]" : string.Empty)} [printer_path.zpl]");
                 return;
             }
 
-            if (!int.TryParse(remainingArgs[0], out sampleId))
+            if (!int.TryParse(idString, out int sampleId))
             {
-                Console.WriteLine($"Sample ID '{remainingArgs[0]}' is not an integer. Please try again.");
+                Console.WriteLine($"Sample ID '{idString}' is not an integer. Please try again.");
                 return;
             }
 
-            remainingArgs.RemoveAt(0);
+            parsed.SampleId = sampleId;
         }
 
-        // If no file name provided, fall back on config default
-        if (isPrint && args.Length < 3)
+        // If in upload mode, the next argument is the upload filename. If not in upload mode, leave the upload path as null.
+        if (parsed.IsUpload)
         {
-            Console.WriteLine($"No input file name detected. Defaulting to Config file input location ({Config.InputLocation}).");
-            fileName = Config.InputLocation;
-        }
-
-        // Filename argument is optional, so only validate if it was provided
-        if (remainingArgs.Count > 0)
-        {
-            string providedFile = remainingArgs[0];
-            if (File.Exists(providedFile))
+            parsed.UploadPath = Config.UploadPath;
+            if (argQueue.TryDequeue(out string? uploadPath))
             {
-                fileName = providedFile;
+                if (File.Exists(uploadPath))
+                {
+                    parsed.UploadPath = uploadPath;
+                }
+                else
+                {
+                    Console.WriteLine($"File '{uploadPath}' not found. Using config file default: {Config.UploadPath}");
+                }
             }
             else
             {
-                Console.WriteLine($"File '{providedFile}' not found. Using config file default: {Config.InputLocation}");
+                Console.WriteLine($"No upload file specified. Using config file default: {Config.UploadPath}");
             }
         }
 
-        // If there wasn't a filename argument, there's no problem, but inform the user of the implied filename
-        else
+        // If in print mode, the next argument is the print filename. If not in print mode, leave the print path as null.
+        if (parsed.IsPrint)
         {
-            Console.WriteLine($"No file specified. Using default: {Config.InputLocation}");
+            parsed.PrintPath = Config.PrintPath;
+            if (argQueue.TryDequeue(out string? printPath))
+            {
+                // Can't check file existence here bc it's a file on the printer, so we just check that it looks like a good path
+                if (printPath.StartsWith("R:") || printPath.StartsWith("E:"))
+                {
+                    parsed.PrintPath = printPath;
+                }
+                else
+                {
+                    Console.WriteLine($"File '{printPath}' must be on the R or E drive. Using config file default: {Config.UploadPath}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"No print file specified. Using config file default: {Config.PrintPath}");
+            }
         }
 
-        // Establish connection with printer regardless of command
-        TcpConnection tcpConn = new (Config.GetPrinterIp(), TcpConnection.DEFAULT_ZPL_TCP_PORT);
+        // Establish and open a connection with the printer regardless of command
+        Connection zplConn = new TcpConnection(Config.GetPrinterIp(), TcpConnection.DEFAULT_ZPL_TCP_PORT);
 
-        await ExecuteAsync(isUpload, isPrint, fileName, tcpConn, new (Config.GetConnectionString()), sampleId);
+        await ExecuteAsync(parsed, zplConn);
     }
 
     /// <summary>
-    /// Uploads/prints <paramref name="fileName"/> to the connected ZPL printer.
+    /// Uploads/prints to the ZPL printer specified by <paramref name="zplConn"/> according to the instructions in <paramref name="args"/>.
     /// </summary>
-    /// <param name="isUpload">Whether to upload <paramref name="fileName"/>.</param>
-    /// <param name="isPrint">Whether to print <paramref name="fileName"/> from printer's internal memory.</param>
-    /// <param name="fileName">The file name to upload/print (if printing without upload, file must already be in printer memory).</param>
-    /// <param name="tcpConn">The TCP connection to the printer.</param>
-    /// <param name="sqlConn">The connection to the SQL database.</param>
-    /// <param name="sampleId">The sample ID (if printing).</param>
+    /// <param name="args">The path to be uploaded to the printer's internal memory. Set to null for print-only.</param>
+    /// <param name="zplConn">The path to be printed from the printer's internal memory. Set to null for upload-only.</param>
     /// <returns>A Task representing that the upload/print is complete.</returns>
-    public static async Task ExecuteAsync(bool isUpload, bool isPrint, string fileName, TcpConnection tcpConn, SqlConnection sqlConn, int sampleId = -1)
+    public static async Task ExecuteAsync(ZplCommand args, Connection zplConn)
     {
-        if (!tcpConn.Connected)
-        {
-            tcpConn.Open();
-        }
-
-        ZebraPrinter printer = ZebraPrinterFactory.GetInstance(tcpConn);
-
         try
+        {
+            if (!zplConn.Connected)
             {
-            if (isUpload)
-            {
-                // TODO load template from local file
-                string zplTemplate = @"
-                    ^XA
-                    ^DFR:FPSAMPLE203.ZPL^FS
-                    ^CI28
-                    ^LH3,3
-                    ^FO0,0^GB603,197,3^FS
-                    ^FO0,13^AF,26^FB80,,,C^FN1^FS
-                    ^FO80,13^AF,26^FB462,,,C^FN2^FS
-                    ^FO542,13^AF,26^FB60,,,C^FN3^FS
-                    ^XZ";
+                zplConn.Open();
+            }
 
-                // If the ZPL doesn't contain a DF command (to switch the printer to download mode), don't send it over.
-                if (!zplTemplate.Contains("^DF"))
+            ZebraPrinter printer = ZebraPrinterFactory.GetInstance(zplConn);
+
+            string? printPathShortcut = null;
+
+            if (args.IsUpload)
+            {
+                // Simple ZPL files are only ever a handful of kilobytes, so verify length, then grab it all for upload without memory concerns.
+                FileInfo fileInfo = new (args.UploadPath);
+                int kbSize = Convert.ToInt32(fileInfo.Length / 1024);
+
+                if (kbSize > Config.KbLimit)
                 {
-                    Console.WriteLine($"{fileName} does not have a download command and would print immediately. Canceling upload...");
+                    Console.WriteLine($"{args.UploadPath} exceeds the size limit of {Config.KbLimit}KB. Canceling upload...");
                     return;
                 }
 
+                string toUpload = File.ReadAllText(args.UploadPath);
+
+                // If the ZPL doesn't contain a DF command (to switch the printer to download mode), don't send it over.
+                if (!toUpload.Contains("^DF"))
+                {
+                    Console.WriteLine($"{args.UploadPath} does not have a download command and would print immediately. Canceling upload...");
+                    return;
+                }
+
+                // Get the print path "shortcut" (for an upload-print) from the template file itself
+                if (args.IsPrint)
+                {
+                    string startMarker = "^DF";
+                    string endMarker = "^FS";
+
+                    int pFrom = toUpload.IndexOf(startMarker) + startMarker.Length;
+                    int pTo = toUpload.IndexOf(endMarker, pFrom);
+
+                    printPathShortcut = toUpload[pFrom..pTo];
+
+                    Console.WriteLine($"Extracted file name for print: {printPathShortcut}");
+                }
+
                 // Send template to printer memory (execute the download command printer-side)
-                tcpConn.Write(Encoding.UTF8.GetBytes(zplTemplate));
+                zplConn.Write(Encoding.UTF8.GetBytes(toUpload));
+                Console.WriteLine("Upload successful!");
             }
 
-            if (isPrint)
+            if (args.IsPrint)
             {
-                // Map ^FN numbers to values
-                Dictionary<int, string> fields = await SampleMapFromId(sampleId, sqlConn);
+                Dictionary<int, string> fields;
 
-                Console.WriteLine(fields.Values.Count);
-
-                if (fields.Values.Count != 10)
+                using (SqlConnection sqlConn = new (Config.GetConnectionString()))
                 {
-                    Console.WriteLine($"{sampleId} is not the ID of a sample in the database. Please try again.");
+                    // Map ^FN numbers to values
+                    fields = await SampleMapFromId(args.SampleId, sqlConn);
+                }
+
+                // SampleMapFromId only returns empty when the sample ID couldn't be found
+                if (fields.Count == 0)
+                {
+                    Console.WriteLine($"{args.SampleId} is not the ID of a sample in the database. Please try again.");
                     return;
                 }
 
                 StringBuilder sb = new ();
 
                 // Recall and print
-                sb.Append($"^XA^XF{fileName}");
+                sb.Append($"^XA^XF{printPathShortcut ?? args.PrintPath}");
                 foreach (KeyValuePair<int, string> entry in fields)
                 {
                     sb.Append($"^FN{entry.Key}^FD{entry.Value}^FS");
@@ -169,7 +235,8 @@ public class Program
 
                 sb.Append("^XZ");
 
-                tcpConn.Write(Encoding.UTF8.GetBytes(sb.ToString()));
+                zplConn.Write(Encoding.UTF8.GetBytes(sb.ToString()));
+                Console.WriteLine("Sent print command to printer. Print should begin shortly.");
             }
         }
         catch (ConnectionException e)
@@ -178,13 +245,12 @@ public class Program
         }
         finally
         {
-            tcpConn.Close();
+            // In case the connection opening caused the exception
+            if (zplConn.Connected)
+            {
+                zplConn.Close();
+            }
         }
-    }
-
-    private static void ShowUsage()
-    {
-        Console.WriteLine("Usage: dotnet run <UPLOAD|PRINT|UPLOAD-PRINT> [sample ID] [file_path.zpl]");
     }
 
     /// <summary>
@@ -193,8 +259,13 @@ public class Program
     /// <param name="id">The sample serial number.</param>
     /// <param name="conn">The connection to the SQL database.</param>
     /// <returns>A dictionary mapping field numbers (for the ZPL template) to field data (from the database).</returns>
-    private static async Task<Dictionary<int, string>> SampleMapFromId(int id, SqlConnection conn)
+    private static async Task<Dictionary<int, string>> SampleMapFromId(int? id, SqlConnection conn)
     {
+        if (id == null)
+        {
+            return [];
+        }
+
         if (conn.State != System.Data.ConnectionState.Open)
         {
             await conn.OpenAsync();
@@ -205,9 +276,9 @@ public class Program
         // Define the query to pull fields required by the ZPL template
         string query = @"
             SELECT
-                dummySampleNum, model, rank, workCenterCode,
-                iteration, creationDate, failureMode, location,
-                creatorName, approverName
+                dummySampleNum, model, rank,
+                workCenterCode, iteration, creationDate,
+                failureMode, location, creatorName
             FROM Samples
             WHERE sampleID = @id";
 
@@ -215,14 +286,14 @@ public class Program
         {
             cmd.Parameters.AddWithValue("@id", id);
 
-            using (SqlDataReader reader = cmd.ExecuteReader())
+            using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
             {
-                if (reader.Read())
+                if (await reader.ReadAsync())
                 {
                     // Helper to format strings with the ZPL centering suffix
                     static string Format(object value) => $"{value?.ToString() ?? string.Empty}\\&";
 
-                    // Mapping database columns to ZPL ^FN indices
+                    // Map database columns to ZPL ^FN indices
                     fieldMap.Add(1,  Format(reader["dummySampleNum"]));
                     fieldMap.Add(2,  Format(reader["model"]));
                     fieldMap.Add(3,  Format(reader["rank"]));

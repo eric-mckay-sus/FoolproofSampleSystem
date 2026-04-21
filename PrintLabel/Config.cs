@@ -12,9 +12,19 @@ using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 internal static class Config
 {
     /// <summary>
-    /// Gets or sets the folder that contains the .xlsx / .xls files to process.
+    /// Gets or sets the program-side path to the template file to upload.
     /// </summary>
-    public static string InputLocation { get; set; } = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample204.zpl";
+    public static string UploadPath { get; set; } = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample204.zpl";
+
+    /// <summary>
+    /// Gets or sets the printer-side path to the template file to load and print.
+    /// </summary>
+    public static string PrintPath { get; set; } = @"R:\FPSAMPLE203.ZPL";
+
+    /// <summary>
+    /// Gets the safe size limit for a ZPL file (RAM precaution).
+    /// </summary>
+    public static int KbLimit { get; } = 20;
 
     /// <summary>
     /// Gets the connection string for the database whose credentials are stored in environment variables.
