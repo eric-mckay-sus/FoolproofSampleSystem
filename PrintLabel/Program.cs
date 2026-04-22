@@ -12,7 +12,7 @@ using Microsoft.Data.SqlClient;
 using System.Threading.Tasks;
 
 /// <summary>
-/// A DTO for the upload/print information required by <see cref="Program.ExecuteAsync"/>.
+/// A DTO for the upload/print information required by <see cref="Program.ExecuteAsync(ZplCommand, Connection)"/>.
 /// </summary>
 public record ZplCommand
 {
@@ -50,7 +50,7 @@ public record ZplCommand
 public class Program
 {
     /// <summary>
-    /// Application entry point. Parses command-line input for mode, filename, and sample to print, then delegates to <see cref="ExecuteAsync"/> to upload/print.
+    /// Application entry point. Parses command-line input for mode, filename, and sample to print, then delegates to <see cref="ExecuteAsync(ZplCommand)"/> to upload/print.
     /// </summary>
     /// <param name="args">The command line arguments specifying whether to upload, print, or both (and which file/sample ID).</param>
     /// <returns>A Task representing program completion.</returns>
@@ -142,14 +142,31 @@ public class Program
             }
         }
 
-        // Establish and open a connection with the printer regardless of command
-        Connection zplConn = new TcpConnection(Config.GetPrinterIp(), TcpConnection.DEFAULT_ZPL_TCP_PORT);
-
-        await ExecuteAsync(parsed, zplConn);
+        // Use the default TCP connection
+        await ExecuteAsync(parsed);
     }
 
     /// <summary>
-    /// Uploads/prints to the ZPL printer specified by <paramref name="zplConn"/> according to the instructions in <paramref name="args"/>.
+    /// Overload for <see cref="ExecuteAsync(ZplCommand, Connection)"/> that defaults to a TCP connection to the config file IP address at the default port.
+    /// </summary>
+    /// <param name="args">The arguments to pass into <see cref="ExecuteAsync(ZplCommand, Connection)"/>.</param>
+    /// <returns> A Task representing that the upload/print is complete.</returns>
+    public static async Task ExecuteAsync(ZplCommand args)
+    {
+        // Establish a connection with the printer regardless of command
+        TcpConnection zplConn = new (Config.GetPrinterIp(), TcpConnection.DEFAULT_ZPL_TCP_PORT);
+
+        await ExecuteAsync(args, zplConn);
+
+        // Close connection, if not handled by callee
+        if (zplConn.Connected)
+        {
+            zplConn.Close();
+        }
+    }
+
+    /// <summary>
+    /// Uploads/prints to the ZPL printer connected via <paramref name="zplConn"/> according to the instructions in <paramref name="args"/>.
     /// </summary>
     /// <param name="args">The path to be uploaded to the printer's internal memory. Set to null for print-only.</param>
     /// <param name="zplConn">The path to be printed from the printer's internal memory. Set to null for upload-only.</param>
