@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\UploadModelMappings\UploadModelMappings.csproj" />
     <ProjectReference Include="..\UploadFpInfo\UploadFpInfo.csproj" />
+    <ProjectReference Include="..\PrintCommon\PrintCommon.csproj" />
   </ItemGroup>
 
 </Project>

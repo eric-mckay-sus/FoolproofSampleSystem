@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrintLabel", "PrintLabel\Pr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleManagement", "SampleManagement\SampleManagement.csproj", "{FDC67EF8-5426-477B-B8BB-5E958CC101F8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrintCommon", "PrintCommon\PrintCommon.csproj", "{E977DAFD-2B5E-436B-8535-93AD22705FF8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{FDC67EF8-5426-477B-B8BB-5E958CC101F8}.Release|x64.Build.0 = Release|Any CPU
 		{FDC67EF8-5426-477B-B8BB-5E958CC101F8}.Release|x86.ActiveCfg = Release|Any CPU
 		{FDC67EF8-5426-477B-B8BB-5E958CC101F8}.Release|x86.Build.0 = Release|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Debug|x64.Build.0 = Debug|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Debug|x86.Build.0 = Debug|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Release|x64.ActiveCfg = Release|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Release|x64.Build.0 = Release|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Release|x86.ActiveCfg = Release|Any CPU
+		{E977DAFD-2B5E-436B-8535-93AD22705FF8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

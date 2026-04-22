@@ -2,14 +2,14 @@
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
-namespace PrintLabel;
+namespace PrintCommon;
 
 using StringBuilder = Microsoft.Data.SqlClient.SqlConnectionStringBuilder;
 
 /// <summary>
 /// A container for the data that is constant in PrintLabel (but could change).
 /// </summary>
-internal static class Config
+public static class Config
 {
     /// <summary>
     /// Gets or sets the program-side path to the template file to upload.
