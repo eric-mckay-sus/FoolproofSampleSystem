@@ -12,15 +12,14 @@ using System.Net.Sockets;
 /// <summary>
 /// Defines methods used to print a sample.
 /// </summary>
-public static class PrintSample
+public partial class ZebraUploadPrint
 {
     /// <summary>
     /// Prompts for and validates the information necessary for a print command (sample ID and print path).
     /// </summary>
     /// <param name="printCmd">The <see cref="ZplCommand"/> in which to assign the print path.</param>
-    /// <param name="input">The <see cref="IInputProvider"/> from which to prompt input.</param>
     /// <returns>A Task representing that the sample ID and print path have been provided.</returns>
-    public static async Task PromptPrint(ZplCommand printCmd, IInputProvider input)
+    public async Task PromptPrint(ZplCommand printCmd)
     {
         string? error;
         string idString;
@@ -28,7 +27,7 @@ public static class PrintSample
         do
         {
             error = null; // Don't persist error from last iteration or from upload path prompt
-            idString = await input.GetInputAsync(new ("Please enter sample ID to be printed"), error);
+            idString = await this.input.GetInputAsync(new ("Please enter sample ID to be printed"), error);
 
             // Set error message if applicable (cheapest check first, first hit holds)
             if (!int.TryParse(idString, out sampleId))
@@ -52,7 +51,7 @@ public static class PrintSample
         do
         {
             error = null; // Don't persist error from last iteration or from sample ID prompt
-            potentialPrintPath = await input.GetInputAsync(new ("Please enter the filename of the template ZPL to print (or just press ENTER to use the config file default): "), error);
+            potentialPrintPath = await this.input.GetInputAsync(new ("Please enter the filename of the template ZPL to print (or just press ENTER to use the config file default): "), error);
 
             // Set error message if applicable (first one holds)
             if (!Path.GetExtension(potentialPrintPath).Equals(".zpl"))
@@ -78,8 +77,8 @@ public static class PrintSample
     /// </summary>
     /// <param name="printCmd">The <see cref="ZplCommand"/> containing the print path.</param>
     /// <param name="stream">The <see cref="NetworkStream"/> to the printer.</param>
-    /// <returns>A <see cref="Report"/> detailing the success/failure of the upload.</returns>
-    public static async Task<Report> PrintAsync(ZplCommand printCmd, NetworkStream stream)
+    /// <returns>A Task representing that the print command has been issued (or been terminated).</returns>
+    public async Task PrintAsync(ZplCommand printCmd, NetworkStream stream)
     {
         Dictionary<int, string> fields;
 
@@ -92,7 +91,7 @@ public static class PrintSample
         // SampleMapFromId only returns empty when the sample ID couldn't be found
         if (fields.Count == 0)
         {
-            return new Report($"{printCmd.SampleId} is not the ID of a sample in the database. Cancelling print...");
+            await this.Report($"{printCmd.SampleId} is not the ID of a sample in the database. Cancelling print...");
         }
 
         StringBuilder sb = new ();
@@ -108,29 +107,8 @@ public static class PrintSample
 
         await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()));
 
-        return new Report("Sent print command to printer. Print should begin shortly.", ReportLevel.SUCCESS);
+        await this.Report("Sent print command to printer. Print should begin shortly.", ReportLevel.SUCCESS);
     }
-
-    // /// <summary>
-    // /// Prints a label for <paramref name="sampleId"/> using the default template file.
-    // /// </summary>
-    // /// <param name="sampleId">The ID of the sample to print.</param>
-    // /// <returns>A <see cref="Report"/> detailing the success/failure of the print.</returns>
-    // public static async Task<Report> PrintAsync(int sampleId)
-    // {
-    //     if (!await ValidateSample(sampleId))
-    //     {
-    //         return new Report($"No sample with ID {sampleId} could be found.");
-    //     }
-
-    //     ZplCommand printCmd = new ()
-    //     {
-    //         IsUpload = false,
-    //         IsPrint = true,
-    //         SampleId = sampleId,
-    //     };
-    //     return await PrintAsync(printCmd);
-    // }
 
     /// <summary>
     /// Verifies that a particular sample ID exists in the sample database.

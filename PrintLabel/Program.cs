@@ -7,11 +7,9 @@ namespace PrintLabel;
 using System.Net.Sockets;
 
 using InterProcessIO;
-using static PrintLabel.UploadZplTemplate;
-using static PrintLabel.PrintSample;
 
 /// <summary>
-/// A DTO for the upload/print information required by <see cref="ZebraUploadPrint.ExecuteAsync(ZplCommand)"/>.
+/// A DTO for the upload/print information required by <see cref="ZebraUploadPrint.ExecuteAsync(ZplCommand, bool)"/>.
 /// </summary>
 public record ZplCommand
 {
@@ -46,7 +44,7 @@ public record ZplCommand
 /// <summary>
 /// Connects to a Zebra printer over TCP to upload a template or print a sample by ID.
 /// </summary>
-public class ZebraUploadPrint
+public partial class ZebraUploadPrint
 {
     /// <summary>
     /// Determines where user input comes from.
@@ -90,7 +88,8 @@ public class ZebraUploadPrint
     }
 
     /// <summary>
-    /// Prompts user for mode, filename(s), and sample to print, then delegates to <see cref="ExecuteAsync(ZplCommand)"/> to upload/print.
+    /// Prompts user for mode, filename(s), and sample to print (all with validation), then delegates to <see cref="ExecuteAsync(ZplCommand, bool)"/> to upload/print.
+    /// Call <see cref="ExecuteAsync(ZplCommand, bool)"/> directly if enough data to form a valid <see cref="ZplCommand"/> is on hand.
     /// </summary>
     /// <returns>A Task representing that the arguments have been parsed and executed.</returns>
     public async Task PromptAndExecute()
@@ -102,14 +101,14 @@ public class ZebraUploadPrint
 
         if (zplCmd.IsUpload)
         {
-            await PromptUpload(zplCmd, this.input);
+            await this.PromptUpload(zplCmd);
         }
 
         zplCmd.IsPrint = await this.input.GetConfirmAsync(new ($"Do you wish to {(zplCmd.IsUpload ? "print a sample using the new template" : "print a sample using a template already on this printer")}?"));
 
         if (zplCmd.IsPrint)
         {
-            await PromptPrint(zplCmd, this.input);
+            await this.PromptPrint(zplCmd);
         }
 
         // Use the default TCP connection
@@ -119,11 +118,12 @@ public class ZebraUploadPrint
     /// <summary>
     /// Overload for <see cref="ExecuteAsync(ZplCommand, TcpClient, bool)"/> that defaults to a TCP connection to the config file IP address at the default port.
     /// </summary>
-    /// <param name="args">The arguments to pass into <see cref="ExecuteAsync(ZplCommand, TcpClient, bool)"/>.</param>
-    /// <returns> A Task representing that the upload/print is complete.</returns>
-    public async Task ExecuteAsync(ZplCommand args)
+    /// <param name="zplCmd">The arguments to pass into <see cref="ExecuteAsync(ZplCommand, TcpClient, bool)"/>.</param>
+    /// <param name="leaveOpen">Whether to leave the connection open for future use (e.g. batching).</param>
+    /// <returns> A <see cref="Report"/> with the upload/print status.</returns>
+    public async Task<Report> ExecuteAsync(ZplCommand zplCmd, bool leaveOpen = false)
     {
-        await this.ExecuteAsync(args, new TcpClient());
+        return await this.ExecuteAsync(zplCmd, new TcpClient(), leaveOpen);
     }
 
     /// <summary>
@@ -132,8 +132,8 @@ public class ZebraUploadPrint
     /// <param name="zplCmd">The <see cref="ZplCommand"/> containing upload/print information.</param>
     /// <param name="zplConn">The <see cref="TcpClient"/> representing the printer connection.</param>
     /// <param name="leaveOpen">Whether to leave the connection open for future use (e.g. batching).</param>
-    /// <returns>A Task representing that the upload/print is complete.</returns>
-    public async Task ExecuteAsync(ZplCommand zplCmd, TcpClient zplConn, bool leaveOpen = false)
+    /// <returns>A <see cref="Report"/> with the upload/print status.</returns>
+    public async Task<Report> ExecuteAsync(ZplCommand zplCmd, TcpClient zplConn, bool leaveOpen = false)
     {
         try
         {
@@ -145,23 +145,34 @@ public class ZebraUploadPrint
 
             using NetworkStream stream = zplConn.GetStream();
 
+            List<string> completedList = [];
+
             if (zplCmd.IsUpload)
             {
-                await UploadAsync(zplCmd, stream);
+                await this.UploadAsync(zplCmd, stream);
+                completedList.Add("Upload");
             }
 
             if (zplCmd.IsPrint)
             {
-                await PrintAsync(zplCmd, stream);
+                await this.PrintAsync(zplCmd, stream);
+                completedList.Add(zplCmd.IsUpload ? "print" : "Print");
             }
+
+            string completedOps = string.Join(" and ", completedList);
+            return new Report($"{completedOps} complete", ReportLevel.SUCCESS);
         }
         catch (SocketException e)
         {
-            await this.Report($"Error connecting to printer: {e.Message}", ReportLevel.ERROR);
+            Report error = new ($"Error connecting to printer: {e.Message}", ReportLevel.ERROR);
+            await this.output.ReportAsync(error);
+            return error;
         }
         catch (IOException e)
         {
-            await this.Report($"Error executing the print command: {e.Message}", ReportLevel.ERROR);
+            Report error = new ($"Error executing the print command: {e.Message}", ReportLevel.ERROR);
+            await this.output.ReportAsync(error);
+            return error;
         }
         finally
         {

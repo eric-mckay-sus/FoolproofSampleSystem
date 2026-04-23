@@ -5,6 +5,8 @@
 namespace SampleManagement.Components.Pages;
 using Microsoft.EntityFrameworkCore;
 using ToastType = BlazorBootstrap.ToastType;
+using PrintLabel;
+using InterProcessIO;
 
 /// <summary>
 /// Code-behind for the CreateSample page.
@@ -44,6 +46,11 @@ public partial class CreateSample : TableManager<Sample>
     /// Flag to expand/collapse sample form.
     /// </summary>
     private bool isFormExpanded = false;
+
+    /// <summary>
+    /// Flag to prevent double-clicks while a print is loading.
+    /// </summary>
+    private bool isPrinting = false;
 
     /// <summary>
     /// Error message about pending sample, if applicable.
@@ -200,6 +207,33 @@ public partial class CreateSample : TableManager<Sample>
         {
             this.errorMessage = $"Database Error: {ex.Message}";
             this.ToastService.Notify(new (ToastType.Danger, "Sample creation failed."));
+        }
+    }
+
+    private async Task HandlePrint(Sample sample)
+    {
+        this.isPrinting = true;
+        try
+        {
+            ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
+            ZebraUploadPrint zupObject = new ();
+            Report statusReport = await zupObject.ExecuteAsync(cmd);
+            if (statusReport.level == ReportLevel.SUCCESS)
+            {
+                this.ToastService.Notify(new (ToastType.Success, $"Sample {sample.SampleID} sent to printer."));
+            }
+            else
+            {
+                this.ToastService.Notify(new (ToastType.Danger, statusReport.message));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Print failed: {ex.Message}"));
+        }
+        finally
+        {
+            this.isPrinting = false;
         }
     }
 

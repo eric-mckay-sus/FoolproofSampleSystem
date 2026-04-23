@@ -93,7 +93,11 @@
     }
     else if (DataView.Any())
     {
-        <TablePresenter T="Sample" Base="this" OnExpand="() => {}" /> // Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button
+        // Don't do anything in this file for expand (it's handled in UniversalTable), but provide a binding to show the button
+        <TablePresenter T="Sample"
+                        Base="this"
+                        OnExpand="() => {}"
+                        OnPrint="HandlePrint" />
     }
     else
     {

@@ -63,7 +63,7 @@
                         </th>
                     }
                      @if (OnPrint.HasDelegate || OnExpand.HasDelegate){
-                        <th>Actions</th> @* For the expand and delete buttons *@
+                        <th>Actions</th> @* For the expand and print buttons *@
                     }
                 </tr>
             </thead>
@@ -92,9 +92,9 @@
                                         }
                                     </button>
                                 }
-                                @* Only show the delete button if there's a delete binding *@
+                                @* Only show the print button if there's a print binding *@
                                 @if (OnPrint.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 text-primary ms-3" @onclick="() => OnPrint.InvokeAsync(item)" title="Delete">
+                                    <button class="btn btn-link btn-action p-0 ms-3" @onclick="() => OnPrint.InvokeAsync(item)" title="Print">
                                         <Icon Name="IconName.Printer" Size="IconSize.x4" />
                                     </button>
                                 }
@@ -109,7 +109,7 @@
 
 @code {
     [Parameter] public IEnumerable<T>? Items { get; set; } // The data to display
-    [Parameter] public EventCallback<T> OnPrint { get; set; } // The action to bind to the delete button being pressed
+    [Parameter] public EventCallback<T> OnPrint { get; set; } // The action to bind to the print button being pressed
     [Parameter] public EventCallback<T> OnExpand { get; set; } // The action to bind to the expand button being pressed
 
     [Parameter] public T? Target { get; set; } // The row to highlight (its information is shown)
