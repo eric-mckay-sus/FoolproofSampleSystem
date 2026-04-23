@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UploadModelMappings", "Uplo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UploadFpInfo", "UploadFpInfo\UploadFpInfo.csproj", "{BFF53639-C679-4DDF-A086-511ACEB2DDBB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileUploadCommon", "FileUploadCommon\FileUploadCommon.csproj", "{161239F9-C7BA-4F74-86C1-C4669C4AF23C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InterProcessIO", "InterProcessIO\InterProcessIO.csproj", "{161239F9-C7BA-4F74-86C1-C4669C4AF23C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PrintLabel", "PrintLabel\PrintLabel.csproj", "{B2FDAE84-DCEF-43C9-A482-D156D097698D}"
 EndProject

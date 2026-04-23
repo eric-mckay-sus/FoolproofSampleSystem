@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using SampleManagement.Authentication;
 using SampleManagement.Components;
-using FileUploadCommon;
+using InterProcessIO;
 
 /// <summary>
 /// Hosts the application startup and configuration.

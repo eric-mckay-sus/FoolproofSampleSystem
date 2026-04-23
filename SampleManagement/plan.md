@@ -60,7 +60,7 @@ The `OnPrint` callback is already scaffolded in `UniversalTable`. In `CreateSamp
 **The project reference question:** `PrintLabel` currently lives as a standalone executable. You have two paths:
 
 - **Path A:** Add a `<ProjectReference>` from `SampleManagement` to `PrintLabel`. This works if you adjust `PrintLabel.csproj` to also build as a library (change `OutputType` to `Library` or add a second target), and ensure the Windows TFM constraint is acceptable for your deployment target.
-- **Path B:** Extract `ExecuteAsync` and the supporting types (`ZplCommand`, `SampleMapFromId`) into a new `PrintLabelCommon` library project (mirroring the `FileUploadCommon` pattern already in your solution), and have both `PrintLabel` and `SampleManagement` reference it.
+- **Path B:** Extract `ExecuteAsync` and the supporting types (`ZplCommand`, `SampleMapFromId`) into a new `PrintLabelCommon` library project (mirroring the `InterProcessIO` pattern already in your solution), and have both `PrintLabel` and `SampleManagement` reference it.
 
 Path B is architecturally cleaner and matches the established pattern in your solution. I'd recommend it. `PrintLabel/Program.cs` becomes a thin CLI wrapper. The printer-facing logic lives in the shared library.
 

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Stanley Electric US Co. Inc. Licensed under the MIT License.
 // </copyright>
 
-namespace FileUploadCommon;
+namespace InterProcessIO;
 
 using System.Data;
 

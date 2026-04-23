@@ -42,7 +42,7 @@ public record ZplCommand
 }
 
 /// <summary>
-/// Utilizes the Zebra printer SDK to connect to a ZPL printer and upload a template or print a sample by ID.
+/// Connects to a Zebra printer over TCP to upload a template or print a sample by ID.
 /// </summary>
 public class ZebraUploadPrint
 {

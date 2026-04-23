@@ -6,7 +6,7 @@ namespace SampleManagement.Components.Pages;
 
 using System.Data;
 using Regex = System.Text.RegularExpressions.Regex;
-using FileUploadCommon;
+using InterProcessIO;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using UploadFpInfo;

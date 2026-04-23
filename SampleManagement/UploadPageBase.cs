@@ -5,7 +5,7 @@
 namespace SampleManagement;
 
 using Inject = Microsoft.AspNetCore.Components.InjectAttribute;
-using FileUploadCommon;
+using InterProcessIO;
 using ToastType = BlazorBootstrap.ToastType;
 using Microsoft.JSInterop;
 
