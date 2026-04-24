@@ -1,3 +1,4 @@
+@using System.Reflection.Metadata
 @typeparam T where T : class
 
 <UniversalTable
@@ -11,6 +12,9 @@
     GetSortIcon="Base.GetSortIcon"
     OnPageSizeChange="Base.AlterPageSize"
     OnPrint="OnPrint"
+    PrintModeEngaged="PrintModeEngaged"
+    SelectedForPrint="SelectedForPrint"
+    SelectedForPrintChanged="SelectedForPrintChanged"
     OnExpand="OnExpand" />
 
 @code{
@@ -18,5 +22,8 @@
     public TableManager<T> Base { get; set; } = default!;
 
     [Parameter] public EventCallback<T> OnPrint { get; set; }
+    [Parameter] public bool PrintModeEngaged { get; set; }
+    [Parameter] public IList<T> SelectedForPrint { get; set; } = [];
+    [Parameter] public EventCallback<IList<T>> SelectedForPrintChanged { get; set; }
     [Parameter] public EventCallback<T> OnExpand { get; set; }
 }

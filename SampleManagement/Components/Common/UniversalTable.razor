@@ -46,65 +46,75 @@
 }
 
 <div class="table-responsive-wrapper">
-    <div class="table-container @(IsStale ? "stale" : "")">
-        <table class="table res-table table-striped text-nowrap">
-            <thead>
-                <tr>
+    <table class="table res-table table-striped text-nowrap">
+        <thead>
+            <tr>
+                @foreach (var prop in GetVisibleProperties())
+                {
+                    var attribute = prop.GetCustomAttribute<ColumnAttribute>();
+                    string displayName = attribute?.Name ?? prop.Name;
+                    bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
+                    <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
+                    class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")"
+                    style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
+                    title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
+                        @displayName @SortIcon(prop.Name)
+                    </th>
+                }
+                    @if (OnPrint.HasDelegate || OnExpand.HasDelegate){
+                    <th>Actions</th> @* For the expand and print buttons *@
+                }
+            </tr>
+        </thead>
+        <tbody>
+            <Virtualize TItem="T" Items="@(Items?.ToList())" Context="item" OverscanCount="8" ItemSize="41">
+                <tr @key="item"
+                    @onclick="() => _attentionItem=_attentionItem?.Equals(item) == true ? default : item"
+                    class="@GetRowClass(item)">
                     @foreach (var prop in GetVisibleProperties())
                     {
-                        var attribute = prop.GetCustomAttribute<ColumnAttribute>();
-                        string displayName = attribute?.Name ?? prop.Name;
                         bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
-                        <th @onclick="() => OnSort.InvokeAsync(prop.Name)"
-                        class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")"
-                        style=@(OnSort.HasDelegate ? "cursor:pointer" : "cursor:auto")
-                        title=@(OnSort.HasDelegate ? $"Toggle sort for {displayName}" : "")>
-                            @displayName @SortIcon(prop.Name)
-                        </th>
+                        <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
                     }
-                     @if (OnPrint.HasDelegate || OnExpand.HasDelegate){
-                        <th>Actions</th> @* For the expand and print buttons *@
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                <Virtualize TItem="T" Items="@(Items?.ToList())" Context="item" OverscanCount="8" ItemSize="41">
-                    <tr @key="item"
-                        @onclick="() => _attentionItem=_attentionItem?.Equals(item) == true ? default : item"
-                        class="@GetRowClass(item)">
-                        @foreach (var prop in GetVisibleProperties())
-                        {
-                            bool isVerbose = prop.GetCustomAttribute<VerboseAttribute>() != null;
-                            <td class="col-@prop.Name @(isVerbose ? "transition-width" : "") @(isVerbose ? (_isExpanded ? "verbose-visible" : "verbose-hidden") : "")">@(prop.GetValue(item)?.ToString() ?? "—")</td>
-                        }
-                        @if (OnExpand.HasDelegate || OnPrint.HasDelegate) {
-                            <td>
-                                @* Only show the expand button if there's an expand binding *@
-                                @if (OnExpand.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 text-secondary" @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }" title="Expand">
-                                        @if (_isExpanded)
-                                        {
-                                            <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
-                                        }
-                                        else
-                                        {
-                                            <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
-                                        }
-                                    </button>
+                    @if (OnExpand.HasDelegate || OnPrint.HasDelegate) {
+                        <td>
+                            @* Only show the expand button if there's an expand binding and we're not in print select mode *@
+                            @if (OnExpand.HasDelegate && !PrintModeEngaged){
+                                <button class="btn btn-link btn-action p-0 text-secondary me-2" @onclick="async () => { _isExpanded = !_isExpanded; await OnExpand.InvokeAsync(item); }" title="Expand">
+                                    @if (_isExpanded)
+                                    {
+                                        <Icon Name="IconName.ArrowsCollapseVertical" Size="IconSize.x4" />
+                                    }
+                                    else
+                                    {
+                                        <Icon Name="IconName.ArrowsExpandVertical" Size="IconSize.x4" />
+                                    }
+                                </button>
+                            }
+                            @* Only show the print button/checkbox if there's a print binding *@
+                            @if (OnPrint.HasDelegate){
+                                @if (PrintModeEngaged)
+                                {
+                                    <input type="checkbox"
+                                        class="form-check-input"
+                                        checked="@(SelectedForPrint?.Contains(item) ?? false)"
+                                        @onchange="e => HandleCheckboxChange(item, e.Value)" />
                                 }
-                                @* Only show the print button if there's a print binding *@
-                                @if (OnPrint.HasDelegate){
-                                    <button class="btn btn-link btn-action p-0 ms-3" @onclick="() => OnPrint.InvokeAsync(item)" title="Print">
+                                else
+                                {
+                                    <button class="btn btn-link btn-action p-0"
+                                            @onclick="() => OnPrint.InvokeAsync(item)"
+                                            title="Print this item">
                                         <Icon Name="IconName.Printer" Size="IconSize.x4" />
                                     </button>
                                 }
-                            </td>
-                        }
-                    </tr>
-                </Virtualize>
-            </tbody>
-        </table>
-    </div>
+                            }
+                        </td>
+                    }
+                </tr>
+            </Virtualize>
+        </tbody>
+    </table>
 </div>
 
 @code {
@@ -151,11 +161,37 @@
         return _cachedProps.Where(p => p.GetCustomAttribute<VerboseAttribute>() == null).ToArray();
     }
 
-    // Sorting & staleness
+    // Sorting & printing
     [Parameter] public EventCallback<string> OnSort { get; set; } // Handles everything related to sorting
     [Parameter] public Func<string, string> GetSortIcon { get; set; } = (col) => "";
-    [Parameter] public bool IsStale { get; set; } = false;
     private string SortIcon(string col) => GetSortIcon?.Invoke(col) ?? "";
+    [Parameter] public bool PrintModeEngaged { get; set; } = false;
+    [Parameter] public IList<T> SelectedForPrint { get; set; } = [];
+    [Parameter] public EventCallback<IList<T>> SelectedForPrintChanged { get; set; }
+
+    private async Task HandleCheckboxChange(T item, object? checkedValue)
+    {
+        bool isChecked = (bool)(checkedValue ?? false);
+
+        List<T> updatedList = new (SelectedForPrint ?? []); // create a new object and manipulate that
+
+        if (isChecked)
+        {
+            if (!updatedList.Contains(item))
+            {
+                updatedList.Add(item);
+            }
+        }
+        else
+        {
+            updatedList.Remove(item);
+        }
+
+        SelectedForPrint = updatedList; // then assign it to the bound parameter to force Blazor to re-render
+
+        // SelectedForPrint is a reference shared with the parent, so the underlying list is updated without any extra parameters.
+        await SelectedForPrintChanged.InvokeAsync();
+    }
 
     // Pagination Params
     [Parameter] public int CurrentPage { get; set; }

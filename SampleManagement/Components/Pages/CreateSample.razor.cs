@@ -48,9 +48,19 @@ public partial class CreateSample : TableManager<Sample>
     private bool isFormExpanded = false;
 
     /// <summary>
-    /// Flag to prevent double-clicks while a print is loading.
+    /// Flag to switch between normal view and print select view.
+    /// </summary>
+    private bool printModeEngaged = false;
+
+    /// <summary>
+    /// Flag to prevent double-clicks while a print is processing.
     /// </summary>
     private bool isPrinting = false;
+
+    /// <summary>
+    /// The list of samples selected for printing.
+    /// </summary>
+    private IList<Sample> selectedForPrint = [];
 
     /// <summary>
     /// Error message about pending sample, if applicable.
@@ -107,7 +117,7 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>A Task representing that filters have been refreshed.</returns>
     private async Task RefreshFilters()
     {
-        using var context = this.DbFactory.CreateDbContext();
+        using FPSampleDbContext context = this.DbFactory.CreateDbContext();
 
         // Normalize inputs to handle casing and extra whitespace
         string searchModel = this.formData.Model.Trim();
@@ -161,6 +171,15 @@ public partial class CreateSample : TableManager<Sample>
         {
             this.availableSampleNums.Clear();
             this.formData.DummySampleNum = 0;
+        }
+    }
+
+    private void TogglePrintMode()
+    {
+        this.printModeEngaged = !this.printModeEngaged;
+        if (!this.printModeEngaged)
+        {
+            this.selectedForPrint.Clear(); // ensure selections do not persist between prints
         }
     }
 
@@ -226,6 +245,40 @@ public partial class CreateSample : TableManager<Sample>
             {
                 this.ToastService.Notify(new (ToastType.Danger, statusReport.message));
             }
+        }
+        catch (Exception ex)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Print failed: {ex.Message}"));
+        }
+        finally
+        {
+            this.isPrinting = false;
+        }
+    }
+
+    private async Task HandlePrint()
+    {
+        this.isPrinting = true;
+        try
+        {
+            foreach (Sample sample in this.selectedForPrint)
+            {
+                ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
+                ZebraUploadPrint zupObject = new ();
+                Report statusReport = await zupObject.ExecuteAsync(cmd);
+                if (statusReport.level == ReportLevel.SUCCESS)
+                {
+                    this.ToastService.Notify(new (ToastType.Success, $"Sample {sample.SampleID} sent to printer."));
+                }
+                else
+                {
+                    this.ToastService.Notify(new (ToastType.Danger, statusReport.message));
+                }
+
+                await Task.Delay(1000); // Wait a second after each to ensure each toast is visible
+            }
+
+            this.printModeEngaged = false;
         }
         catch (Exception ex)
         {

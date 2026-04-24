@@ -153,18 +153,11 @@ public class TableManager<T> : ComponentBase
     /// <returns>A Task representing that the page has been changed.</returns>
     public async Task ChangePage(int newPage)
     {
-        if (newPage < 1)
+        if (newPage != this.CurrentPage && newPage >= 1 && newPage <= this.TotalPages)
         {
-            newPage = 1;
+            this.CurrentPage = newPage;
+            await this.RefreshData(keepPage: true);
         }
-
-        if (newPage == this.CurrentPage)
-        {
-            return;
-        }
-
-        this.CurrentPage = newPage;
-        await this.RefreshData(keepPage: true);
     }
 
     /// <summary>
