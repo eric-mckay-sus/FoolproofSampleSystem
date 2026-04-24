@@ -348,7 +348,7 @@ public partial class CreateSample : TableManager<Sample>
         // Go here when the user cancels a batch print
         catch (OperationCanceledException)
         {
-            this.ToastService.Notify(new (ToastType.Warning, $"Print batch cancelled after {this.printed} of {this.totalFromQueue} labels."));
+            this.ToastService.Notify(new (ToastType.Warning, $"Print batch cancelled after {this.printed + failedIds.Count} of {this.totalFromQueue} labels."));
         }
 
         // Have to handle Socket & IO exceptions here because this component owns the TCP connection

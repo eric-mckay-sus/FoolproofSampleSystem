@@ -29,7 +29,7 @@ public partial class FPSheet : UploadPageBase<FoolproofEntry>
     private IList<string> availableModels = [];
 
     /// <summary>
-    /// The current input/confirmation message from <see cref="UploadPageBase{T}.InputProvider"/>.
+    /// The current input/confirmation message from <see cref="TableManager{T}.InputProvider"/>.
     /// </summary>
     private string? currentPrompt;
 
