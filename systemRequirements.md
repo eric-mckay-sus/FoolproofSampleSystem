@@ -12,7 +12,7 @@
 
 - Tool for uploading FP sample sheets
   - Sheet-wide data
-    - Base Model/Product (as model)
+    - Base Model/Product (manually entered to match C. Core, no FK because we want it to be non-retroactive)
     - Revision
     - Issue date
     - Who issued
@@ -46,12 +46,46 @@
 
 ### Label printing
 
-- Associate identifies sample to prepare
-- Format for printing
-- Approval happens immediately after print
+Use TCP for both upload and print
+
+- Upload tool
+  - Utility to save a new template to the printer (at specific path)
+  - Restrict to ZPL files saving to the R or E drive
+  - Require DF command to avoid accidental label print
+
+- Print tool
+  - Associate identifies sample to prepare from sample table/specifies sample ID & program can gather the data necessary for print
+    - Can select multiple labels to print in batch
+  - Choose a template file stored on the printer and send over the field data with the command to recall format (don't send over the template info at print time)
 
 ### Sample approval
 
-- Some way to track who is authorized to approve samples
+Literal approval does not touch the DB (in-person, approver must physically sign label)
+
+- Later, approver documents a sample as approved using new SP via form
+  - New SP (AuthorizeSample) sets isActive bit and assigns approval info
+- Blazor page is a view of Samples filtering out entries without approval info (can't use isActive bit bc that includes outdated)
+- Track approver number in DB instead of name
 
 ### Sample remake
+
+Sometimes a sample may be lost, break, or otherwise fail to fulfill its test, so it must be remade. This page needs an associate and approver version.
+
+- New table for remake requests
+  - Sample ID
+  - Dummy sample number
+  - Associate name
+  - Remake reason
+  - Request datetime
+  - isClosed bit
+- Add column to Samples to track remake date (to hide)
+
+- Associate
+  - Show view of samples where isActive is set
+  - Provide line/model filters
+  - Select a sample, then fill out a remake request form
+
+- Approver
+  - Show all remake requests with isClosed bit unset
+  - Only action per row is to close (set isClosed)
+  - Approver decides whether to actually remake, no built-in remake button (create new sample as usual)
