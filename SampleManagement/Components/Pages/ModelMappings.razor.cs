@@ -4,7 +4,7 @@
 
 namespace SampleManagement.Components.Pages;
 
-using FileUploadCommon;
+using InterProcessIO;
 using Microsoft.AspNetCore.Components.Forms;
 using UploadModelMappings;
 

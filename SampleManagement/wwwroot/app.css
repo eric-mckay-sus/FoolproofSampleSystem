@@ -376,3 +376,26 @@ h1:focus {
     padding: 10px;
     border-radius: 4px;
 }
+
+.transition-width {
+    transition: flex 0.4s ease-in-out,
+                max-width 0.4s ease-in-out,
+                width 0.4s ease-in-out;
+
+    /* Ensure the element doesn't snap to content size during the move */
+    flex-shrink: 0;
+    flex-grow: 0;
+}
+
+.verbose-hidden {
+    max-width: 0;
+    width: 0;
+    padding: 0 !important;
+    border: none;
+    overflow: hidden;
+}
+
+.verbose-visible {
+    max-width: none;
+    width: auto;
+}

@@ -9,6 +9,8 @@ using Microsoft.EntityFrameworkCore;
 using ToastService = BlazorBootstrap.ToastService;
 using System.Linq.Dynamic.Core;
 
+using InterProcessIO;
+
 /// <summary>
 /// Minimal table logic for loading and paging data from <see cref="FPSampleDbContext"/>.
 /// Designed to provide the data needed by <c>UniversalTable</c> without filters or UI-only services.
@@ -17,6 +19,18 @@ using System.Linq.Dynamic.Core;
 public class TableManager<T> : ComponentBase
     where T : class
 {
+    /// <summary>
+    /// Gets or sets this upload page's input provider.
+    /// </summary>
+    [Inject]
+    public BlazorInputProvider InputProvider { get; set; } = default!;
+
+    /// <summary>
+    /// Gets or sets this upload page's output provider.
+    /// </summary>
+    [Inject]
+    public BlazorReporter Reporter { get; set; } = default!;
+
     /// <summary>
     /// Gets the data from the DB table with rows of type <typeparamref name="T" /> (there should only be one).
     /// </summary>
@@ -153,18 +167,11 @@ public class TableManager<T> : ComponentBase
     /// <returns>A Task representing that the page has been changed.</returns>
     public async Task ChangePage(int newPage)
     {
-        if (newPage < 1)
+        if (newPage != this.CurrentPage && newPage >= 1 && newPage <= this.TotalPages)
         {
-            newPage = 1;
+            this.CurrentPage = newPage;
+            await this.RefreshData(keepPage: true);
         }
-
-        if (newPage == this.CurrentPage)
-        {
-            return;
-        }
-
-        this.CurrentPage = newPage;
-        await this.RefreshData(keepPage: true);
     }
 
     /// <summary>

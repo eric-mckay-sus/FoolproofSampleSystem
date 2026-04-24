@@ -6,6 +6,10 @@ namespace SampleManagement.Components.Pages;
 using Microsoft.EntityFrameworkCore;
 using ToastType = BlazorBootstrap.ToastType;
 
+using PrintLabel;
+using InterProcessIO;
+using System.Net.Sockets;
+
 /// <summary>
 /// Code-behind for the CreateSample page.
 /// </summary>
@@ -41,14 +45,45 @@ public partial class CreateSample : TableManager<Sample>
     // UI properties
 
     /// <summary>
+    /// The number of samples successfully printed in the current batch.
+    /// </summary>
+    private int printed = 0;
+
+    /// <summary>
+    /// The current batch size.
+    /// </summary>
+    private int totalFromQueue = 0;
+
+    /// <summary>
     /// Flag to expand/collapse sample form.
     /// </summary>
     private bool isFormExpanded = false;
 
     /// <summary>
+    /// Flag to switch between normal view and print select view.
+    /// </summary>
+    private bool printModeEngaged = false;
+
+    /// <summary>
+    /// Flag to prevent double-clicks while a print is processing.
+    /// </summary>
+    private bool isPrinting = false;
+
+    /// <summary>
+    /// The list of samples selected for printing.
+    /// Could swap out List for HashSet, but the benefit here is that execution order matches selection order.
+    /// </summary>
+    private List<Sample> selectedForPrint = [];
+
+    /// <summary>
     /// Error message about pending sample, if applicable.
     /// </summary>
     private string? errorMessage;
+
+    /// <summary>
+    /// Allows for cancelling mid-print.
+    /// </summary>
+    private CancellationTokenSource? printCts;
 
     /// <summary>
     /// Gets a value indicating whether the sample form is ready for a dummy sample number.
@@ -94,13 +129,17 @@ public partial class CreateSample : TableManager<Sample>
         await base.OnInitializedAsync();
     }
 
+    private static void DoNothing()
+    {
+    }
+
     /// <summary>
     /// Filters the autofill lists based on what fields in the add form have values.
     /// </summary>
     /// <returns>A Task representing that filters have been refreshed.</returns>
     private async Task RefreshFilters()
     {
-        using var context = this.DbFactory.CreateDbContext();
+        using FPSampleDbContext context = this.DbFactory.CreateDbContext();
 
         // Normalize inputs to handle casing and extra whitespace
         string searchModel = this.formData.Model.Trim();
@@ -157,6 +196,15 @@ public partial class CreateSample : TableManager<Sample>
         }
     }
 
+    private void TogglePrintMode()
+    {
+        this.printModeEngaged = !this.printModeEngaged;
+        if (!this.printModeEngaged)
+        {
+            this.selectedForPrint.Clear(); // ensure selections do not persist between prints
+        }
+    }
+
     /// <summary>
     /// Remove add form flag, clear input, error message and autofill list filters.
     /// </summary>
@@ -200,6 +248,128 @@ public partial class CreateSample : TableManager<Sample>
         {
             this.errorMessage = $"Database Error: {ex.Message}";
             this.ToastService.Notify(new (ToastType.Danger, "Sample creation failed."));
+        }
+    }
+
+    /// <summary>
+    /// Prints one sample.
+    /// </summary>
+    /// <param name="sample">The <see cref="Sample"/> to print.</param>
+    /// <returns>A Task representing that the print request has been issued (toast reports actual status).</returns>
+    private async Task HandlePrint(Sample sample)
+    {
+        this.isPrinting = true;
+        try
+        {
+            ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
+            ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
+            Report statusReport = await zupObject.ExecuteAsync(cmd);
+            if (statusReport.level == ReportLevel.SUCCESS)
+            {
+                this.ToastService.Notify(new (ToastType.Success, $"Sample {sample.SampleID} sent to printer."));
+            }
+            else
+            {
+                this.ToastService.Notify(new (ToastType.Danger, statusReport.message));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Print failed: {ex.Message}"));
+        }
+        finally
+        {
+            this.isPrinting = false;
+        }
+    }
+
+    /// <summary>
+    /// Prints all samples in <see cref="selectedForPrint"/>, batching over one TCP connection.
+    /// </summary>
+    /// <returns>A Task representing that all print requests have been issued.</returns>
+    private async Task HandlePrint()
+    {
+        this.isPrinting = true;
+        this.printCts = new ();
+        this.totalFromQueue = this.selectedForPrint.Count;
+        HashSet<int> failedIds = [];
+
+        using TcpClient conn = new ();
+        try
+        {
+            await conn.ConnectAsync(PrintLabel.Config.GetPrinterIp(), PrintLabel.Config.PrinterPort, this.printCts.Token);
+
+            foreach (Sample sample in this.selectedForPrint)
+            {
+                // If the printer is mid-print, let it finish the current label before canceling
+                this.printCts.Token.ThrowIfCancellationRequested();
+
+                // Create a print request for each sample
+                ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
+                ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
+                Report statusReport = await zupObject.ExecuteAsync(cmd, conn, leaveOpen: true);
+                if (statusReport.level == ReportLevel.SUCCESS)
+                {
+                    this.ToastService.Notify(new (ToastType.Success, $"Sample #{sample.SampleID} sent to printer."));
+                    this.printed++;
+                }
+                else
+                {
+                    this.ToastService.Notify(new (ToastType.Danger, $"Sample {sample.SampleID}: {statusReport.message}"));
+                    failedIds.Add(sample.SampleID);
+                }
+
+                await Task.Delay(PrintLabel.Config.InterPrintDelayMs, this.printCts.Token); // Wait a second between prints to ensure each toast is visible and that printer isn't overloaded
+            }
+
+            // By setting selectedForPrint to only the failed IDs, the user can see easily which samples to investigate
+            this.selectedForPrint = this.selectedForPrint.Where(x => failedIds.Contains(x.SampleID)).ToList();
+
+            // If no prints failed, inform the user and exit print mode
+            if (this.selectedForPrint.Count == 0)
+            {
+                this.ToastService.Notify(new (ToastType.Success, $"Successfully printed all {this.printed} samples!"));
+                this.printModeEngaged = false;
+            }
+
+            // Otherwise, tell the user which prints failed
+            else if (this.selectedForPrint.Count == this.totalFromQueue)
+            {
+                this.ToastService.Notify(new (ToastType.Danger, "Total Failure", "All prints failed."));
+            }
+            else
+            {
+                this.ToastService.Notify(new (ToastType.Warning,
+                                            $"Printed {this.printed} of {this.printed + failedIds.Count} samples (unsuccessful prints still selected)",
+                                            $"Failed to print samples with IDs {string.Join(", ", failedIds)}"));
+            }
+        }
+
+        // Go here when the user cancels a batch print
+        catch (OperationCanceledException)
+        {
+            this.ToastService.Notify(new (ToastType.Warning, $"Print batch cancelled after {this.printed} of {this.totalFromQueue} labels."));
+        }
+
+        // Have to handle Socket & IO exceptions here because this component owns the TCP connection
+        catch (SocketException e)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Error connecting to printer: {e.Message}"));
+        }
+        catch (IOException e)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Error executing the print command: {e.Message}"));
+        }
+        finally
+        {
+            if (conn.Connected)
+            {
+                conn.Close();
+            }
+
+            this.printCts.Dispose();
+            this.printCts = null;
+            this.isPrinting = false;
         }
     }
 

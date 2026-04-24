@@ -11,6 +11,9 @@
     GetSortIcon="Base.GetSortIcon"
     OnPageSizeChange="Base.AlterPageSize"
     OnPrint="OnPrint"
+    PrintModeEngaged="PrintModeEngaged"
+    SelectedForPrint="SelectedForPrint"
+    SelectedForPrintChanged="SelectedForPrintChanged"
     OnExpand="OnExpand" />
 
 @code{
@@ -18,5 +21,8 @@
     public TableManager<T> Base { get; set; } = default!;
 
     [Parameter] public EventCallback<T> OnPrint { get; set; }
+    [Parameter] public bool PrintModeEngaged { get; set; }
+    [Parameter] public List<T> SelectedForPrint { get; set; } = [];
+    [Parameter] public EventCallback<List<T>> SelectedForPrintChanged { get; set; }
     [Parameter] public EventCallback<T> OnExpand { get; set; }
 }

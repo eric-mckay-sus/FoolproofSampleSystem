@@ -5,7 +5,7 @@
 namespace SampleManagement;
 
 using Inject = Microsoft.AspNetCore.Components.InjectAttribute;
-using FileUploadCommon;
+using InterProcessIO;
 using ToastType = BlazorBootstrap.ToastType;
 using Microsoft.JSInterop;
 
@@ -20,18 +20,6 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     /// This session's unique ID (for naming this session's directory).
     /// </summary>
     private static readonly string SessionId = Guid.NewGuid().ToString();
-
-    /// <summary>
-    /// Gets or sets this upload page's input provider.
-    /// </summary>
-    [Inject]
-    public BlazorInputProvider InputProvider { get; set; } = default!;
-
-    /// <summary>
-    /// Gets or sets this upload page's output provider.
-    /// </summary>
-    [Inject]
-    public BlazorReporter Reporter { get; set; } = default!;
 
     /// <summary>
     /// Gets or sets the JavaScript runtime for reload protection.
@@ -55,12 +43,12 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     protected bool IsUploading { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets a value indicating whether <see cref="InputProvider"/> is awaiting confirmation (i.e. whether to display the confirmation dialog).
+    /// Gets or sets a value indicating whether <see cref="TableManager{T}.InputProvider"/> is awaiting confirmation (i.e. whether to display the confirmation dialog).
     /// </summary>
     protected bool IsAwaitingConfirmation { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets a value indicating whether <see cref="InputProvider"/> is awaiting a string of user input (i.e. whether to display the text box dialog).
+    /// Gets or sets a value indicating whether <see cref="TableManager{T}.InputProvider"/> is awaiting a string of user input (i.e. whether to display the text box dialog).
     /// </summary>
     protected bool IsAwaitingInput { get; set; } = false;
 
@@ -70,7 +58,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     protected bool IsProcessingSelection { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the text for the loading bar (from <see cref="Reporter"/> ).
+    /// Gets or sets the text for the loading bar (from <see cref="TableManager{T}.Reporter"/> ).
     /// </summary>
     protected string CurrentDisplayStatus { get; set; } = "Idle";
 

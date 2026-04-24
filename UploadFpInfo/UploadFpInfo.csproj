@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FileUploadCommon\FileUploadCommon.csproj" />
+    <ProjectReference Include="..\InterProcessIO\InterProcessIO.csproj" />
   </ItemGroup>
 
 </Project>
