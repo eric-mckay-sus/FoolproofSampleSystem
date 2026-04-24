@@ -8,6 +8,7 @@ using ToastType = BlazorBootstrap.ToastType;
 
 using PrintLabel;
 using InterProcessIO;
+using System.Net.Sockets;
 
 /// <summary>
 /// Code-behind for the CreateSample page.
@@ -80,6 +81,11 @@ public partial class CreateSample : TableManager<Sample>
     private string? errorMessage;
 
     /// <summary>
+    /// Allows for cancelling mid-print.
+    /// </summary>
+    private CancellationTokenSource? printCts;
+
+    /// <summary>
     /// Gets a value indicating whether the sample form is ready for a dummy sample number.
     /// </summary>
     private bool NotReadyForSampleNum =>
@@ -121,6 +127,10 @@ public partial class CreateSample : TableManager<Sample>
         this.CurrentSortColumn = "CreationDate";
         this.SortDir = "descending";
         await base.OnInitializedAsync();
+    }
+
+    private static void DoNothing()
+    {
     }
 
     /// <summary>
@@ -274,21 +284,30 @@ public partial class CreateSample : TableManager<Sample>
     }
 
     /// <summary>
-    /// Prints all samples in <see cref="selectedForPrint"/>.
+    /// Prints all samples in <see cref="selectedForPrint"/>, batching over one TCP connection.
     /// </summary>
     /// <returns>A Task representing that all print requests have been issued.</returns>
     private async Task HandlePrint()
     {
         this.isPrinting = true;
+        this.printCts = new ();
         this.totalFromQueue = this.selectedForPrint.Count;
         HashSet<int> failedIds = [];
-        foreach (Sample sample in this.selectedForPrint)
+
+        using TcpClient conn = new ();
+        try
         {
-            try
+            await conn.ConnectAsync(PrintLabel.Config.GetPrinterIp(), PrintLabel.Config.PrinterPort, this.printCts.Token);
+
+            foreach (Sample sample in this.selectedForPrint)
             {
+                // If the printer is mid-print, let it finish the current label before canceling
+                this.printCts.Token.ThrowIfCancellationRequested();
+
+                // Create a print request for each sample
                 ZplCommand cmd = new () { IsPrint = true, SampleId = sample.SampleID };
                 ZebraUploadPrint zupObject = new (this.InputProvider, this.Reporter);
-                Report statusReport = await zupObject.ExecuteAsync(cmd);
+                Report statusReport = await zupObject.ExecuteAsync(cmd, conn, leaveOpen: true);
                 if (statusReport.level == ReportLevel.SUCCESS)
                 {
                     this.ToastService.Notify(new (ToastType.Success, $"Sample #{sample.SampleID} sent to printer."));
@@ -300,29 +319,58 @@ public partial class CreateSample : TableManager<Sample>
                     failedIds.Add(sample.SampleID);
                 }
 
-                await Task.Delay(1000); // Wait a second between prints to ensure each toast is visible
+                await Task.Delay(PrintLabel.Config.InterPrintDelayMs, this.printCts.Token); // Wait a second between prints to ensure each toast is visible and that printer isn't overloaded
             }
-            catch (Exception ex)
+
+            // By setting selectedForPrint to only the failed IDs, the user can see easily which samples to investigate
+            this.selectedForPrint = this.selectedForPrint.Where(x => failedIds.Contains(x.SampleID)).ToList();
+
+            // If no prints failed, inform the user and exit print mode
+            if (this.selectedForPrint.Count == 0)
             {
-                this.ToastService.Notify(new (ToastType.Danger, $"Print failed for sample {sample.SampleID}: {ex.Message}"));
-                failedIds.Add(sample.SampleID);
+                this.ToastService.Notify(new (ToastType.Success, $"Successfully printed all {this.printed} samples!"));
+                this.printModeEngaged = false;
+            }
+
+            // Otherwise, tell the user which prints failed
+            else if (this.selectedForPrint.Count == this.totalFromQueue)
+            {
+                this.ToastService.Notify(new (ToastType.Danger, "Total Failure", "All prints failed."));
+            }
+            else
+            {
+                this.ToastService.Notify(new (ToastType.Warning,
+                                            $"Printed {this.printed} of {this.printed + failedIds.Count} samples (unsuccessful prints still selected)",
+                                            $"Failed to print samples with IDs {string.Join(", ", failedIds)}"));
             }
         }
 
-        // By setting selectedForPrint to only the failed IDs, the user can see easily which samples to investigate
-        this.selectedForPrint = this.selectedForPrint.Where(x => failedIds.Contains(x.SampleID)).ToList();
-
-        if (this.selectedForPrint.Count == 0)
+        // Go here when the user cancels a batch print
+        catch (OperationCanceledException)
         {
-            this.ToastService.Notify(new (ToastType.Success, $"Successfully printed all {this.printed} samples!"));
-            this.printModeEngaged = false;
-        }
-        else
-        {
-            this.ToastService.Notify(new (ToastType.Warning, $"Printed {this.printed} of {this.printed + failedIds.Count} samples (unsuccessful prints still selected)", $"Failed to print samples with IDs {string.Join(", ", failedIds)}"));
+            this.ToastService.Notify(new (ToastType.Warning, $"Print batch cancelled after {this.printed} of {this.totalFromQueue} labels."));
         }
 
-        this.isPrinting = false;
+        // Have to handle Socket & IO exceptions here because this component owns the TCP connection
+        catch (SocketException e)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Error connecting to printer: {e.Message}"));
+        }
+        catch (IOException e)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, $"Error executing the print command: {e.Message}"));
+        }
+        finally
+        {
+            if (conn.Connected)
+            {
+                conn.Close();
+            }
+
+            this.printCts.Dispose();
+            this.printCts = null;
+            this.isPrinting = false;
+        }
     }
 
     /// <summary>
