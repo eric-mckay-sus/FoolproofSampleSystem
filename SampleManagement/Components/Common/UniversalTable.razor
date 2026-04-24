@@ -166,8 +166,8 @@
     [Parameter] public Func<string, string> GetSortIcon { get; set; } = (col) => "";
     private string SortIcon(string col) => GetSortIcon?.Invoke(col) ?? "";
     [Parameter] public bool PrintModeEngaged { get; set; } = false;
-    [Parameter] public IList<T> SelectedForPrint { get; set; } = [];
-    [Parameter] public EventCallback<IList<T>> SelectedForPrintChanged { get; set; }
+    [Parameter] public List<T> SelectedForPrint { get; set; } = [];
+    [Parameter] public EventCallback<List<T>> SelectedForPrintChanged { get; set; }
 
     private async Task HandleCheckboxChange(T item, object? checkedValue)
     {
@@ -189,8 +189,8 @@
 
         SelectedForPrint = updatedList; // then assign it to the bound parameter to force Blazor to re-render
 
-        // SelectedForPrint is a reference shared with the parent, so the underlying list is updated without any extra parameters.
-        await SelectedForPrintChanged.InvokeAsync();
+        // SelectedForPrint gets updated with updatedList as a parameter
+        await SelectedForPrintChanged.InvokeAsync(updatedList);
     }
 
     // Pagination Params

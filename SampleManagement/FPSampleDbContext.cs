@@ -136,7 +136,6 @@ public class Sample
     /// Gets or sets the unique sample identifier.
     /// </summary>
     [Column("sampleID")]
-    [Verbose]
     public int SampleID { get; set; }
 
     /// <summary>
@@ -228,6 +227,36 @@ public class Sample
     [Column("isActive")]
     [Verbose]
     public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Associates are equal if they share the same badge number.
+    /// </summary>
+    /// <param name="obj">The object to compare.</param>
+    /// <returns>True when the objects represent the same associate.</returns>
+    public override bool Equals(object? obj)
+    {
+        if (obj is Sample other)
+        {
+            return this.SampleID == other.SampleID;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the hash code for this associate.
+    /// </summary>
+    /// <returns>The associate's hash code.</returns>
+    public override int GetHashCode() => this.SampleID.GetHashCode();
+
+    /// <summary>
+    /// Returns a descriptive string representation of this associate.
+    /// </summary>
+    /// <returns>The associate description.</returns>
+    public override string ToString()
+    {
+        return $"ID: {this.SampleID}, Sample #: {this.DummySampleNum}, Model: {this.Model}, Line: {this.Line}";
+    }
 }
 
 /// <summary>

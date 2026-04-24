@@ -23,7 +23,7 @@
 
     [Parameter] public EventCallback<T> OnPrint { get; set; }
     [Parameter] public bool PrintModeEngaged { get; set; }
-    [Parameter] public IList<T> SelectedForPrint { get; set; } = [];
-    [Parameter] public EventCallback<IList<T>> SelectedForPrintChanged { get; set; }
+    [Parameter] public List<T> SelectedForPrint { get; set; } = [];
+    [Parameter] public EventCallback<List<T>> SelectedForPrintChanged { get; set; }
     [Parameter] public EventCallback<T> OnExpand { get; set; }
 }
