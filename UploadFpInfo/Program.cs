@@ -30,6 +30,16 @@ public class FPSheetUploader
     private readonly IOutputProvider output;
 
     /// <summary>
+    /// Validates model names against the model-to-line database.
+    /// </summary>
+    private readonly IModelValidator modelValidator;
+
+    /// <summary>
+    /// Optional upload override used by tests to avoid opening a database connection.
+    /// </summary>
+    private readonly Func<DataTable, Task<ParseResult>>? uploadOverride;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="FPSheetUploader"/> class.
     /// By default, uses the console for input and output.
     /// </summary>
@@ -37,6 +47,7 @@ public class FPSheetUploader
     {
         this.input = new ConsoleInputProvider();
         this.output = new ConsoleReporter();
+        this.modelValidator = new SqlModelValidator();
     }
 
     /// <summary>
@@ -45,9 +56,27 @@ public class FPSheetUploader
     /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
     /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
     public FPSheetUploader(IInputProvider inputProvider, IOutputProvider outputProvider)
+        : this(inputProvider, outputProvider, new SqlModelValidator(), null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FPSheetUploader"/> class with injectable collaborators for testing.
+    /// </summary>
+    /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
+    /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
+    /// <param name="modelValidator">The model validator to use when confirming C. Core model names.</param>
+    /// <param name="uploadOverride">Optional upload handler that bypasses the default SQL bulk-copy path.</param>
+    public FPSheetUploader(
+        IInputProvider inputProvider,
+        IOutputProvider outputProvider,
+        IModelValidator modelValidator,
+        Func<DataTable, Task<ParseResult>>? uploadOverride)
     {
         this.input = inputProvider;
         this.output = outputProvider;
+        this.modelValidator = modelValidator;
+        this.uploadOverride = uploadOverride;
     }
 
     /// <summary>
@@ -212,7 +241,7 @@ public class FPSheetUploader
     /// </summary>
     /// <param name="path">The path to the file to be processed.</param>
     /// <returns>A Task containing a <see cref="ParseResult"/> describing this file's success/failure.</returns>
-    private async Task<ParseResult> ProcessFile(string path)
+    internal async Task<ParseResult> ProcessFile(string path)
     {
         await this.output.SetCurrentFile(GetFileName(path));
 
@@ -223,9 +252,9 @@ public class FPSheetUploader
         bool applyAnotherFilter = false;
         bool isNewFile = true;
 
-        // One DB connection to be used across all rows of this file
-        using SqlConnection conn = new (Config.GetConnectionString());
-        await conn.OpenAsync();
+        await using SqlConnection? conn = this.uploadOverride == null
+            ? await OpenUploadConnectionAsync()
+            : null;
 
         // Report file start just before the 'apply another filter?' loop to track only new files started
         await this.output.ReportProgress(ProgressEvent.FileStarted);
@@ -256,7 +285,9 @@ public class FPSheetUploader
 
             if (dt.Rows.Count > 0)
             {
-                parseResult = await this.AttemptUpload(dt, conn);
+                parseResult = this.uploadOverride != null
+                    ? await this.uploadOverride(dt)
+                    : await this.AttemptUpload(dt, conn!);
             }
 
             // If every row was duplicate, assume the file was already uploaded for this model.
@@ -286,6 +317,17 @@ public class FPSheetUploader
         await this.output.ReportProgress(ProgressEvent.FileCompleted);
 
         return parseResult;
+    }
+
+    /// <summary>
+    /// Opens the SQL connection used for production uploads.
+    /// </summary>
+    /// <returns>An open connection to the foolproof database.</returns>
+    private static async Task<SqlConnection> OpenUploadConnectionAsync()
+    {
+        SqlConnection conn = new (Config.GetConnectionString());
+        await conn.OpenAsync();
+        return conn;
     }
 
     /// <summary>
@@ -370,7 +412,7 @@ public class FPSheetUploader
                 return (potentialModel, isFiltering, targetColIndex);
             }
 
-            potentialModel = await ValidateModel(potentialModel);
+            potentialModel = await this.modelValidator.ValidateAsync(potentialModel);
 
             // Verify that the model actually exists (this is why the MTL database is prerequisite for this program)
             if (string.IsNullOrEmpty(potentialModel))
@@ -434,10 +476,7 @@ public class FPSheetUploader
             }
 
             // Otherwise, treat it as a valid column name
-            targetColIndex = ColumnIndex(filterColumnName);
-
-            // Make sure it falls in the designated range
-            if (targetColIndex >= 64 && targetColIndex <= 87)
+            if (TryParseFilterColumn(filterColumnName, out targetColIndex))
             {
                 isFiltering = true;
                 return (isFiltering, targetColIndex);

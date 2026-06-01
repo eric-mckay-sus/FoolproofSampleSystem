@@ -256,7 +256,12 @@ public static partial class NpoiEtlUtilities
             return string.Empty;
         }
 
-        ICell cell = row.GetCell(colIndex);
+        ICell? cell = row.GetCell(colIndex);
+        if (cell == null)
+        {
+            return string.Empty;
+        }
+
         return GetCellText(cell, cell.CellType);
     }
 
@@ -325,6 +330,33 @@ public static partial class NpoiEtlUtilities
     public static bool IsExcelFile(string path) =>
         path.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
         path.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Parses an optional BM-CJ column filter name into a zero-based column index.
+    /// </summary>
+    /// <param name="columnName">The Excel column letters entered by the user.</param>
+    /// <param name="targetColIndex">The parsed column index when the name is valid.</param>
+    /// <returns>Whether <paramref name="columnName"/> is within the supported filter range.</returns>
+    public static bool TryParseFilterColumn(string columnName, out int targetColIndex)
+    {
+        targetColIndex = ColumnIndex(columnName);
+        return targetColIndex >= 64 && targetColIndex <= 87;
+    }
+
+    /// <summary>
+    /// Loads a workbook, applies model metadata, and builds the upload table without touching the database.
+    /// </summary>
+    /// <param name="path">The path to the Excel workbook.</param>
+    /// <param name="model">The C. Core model name to stamp on each row.</param>
+    /// <param name="isFiltering">Whether a column filter should be applied.</param>
+    /// <param name="targetColIndex">The zero-based column index used when <paramref name="isFiltering"/> is true.</param>
+    /// <returns>The rows ready for upload.</returns>
+    public static async Task<DataTable> BuildDataTableFromPath(string path, string model, bool isFiltering, int targetColIndex)
+    {
+        (ISheet sheet, SheetWideData metadata, Dictionary<string, int> colMap) = await LoadAndValidateWorkbook(path);
+        metadata.Model = model;
+        return BuildDataTableFromSheet(sheet, metadata, colMap, isFiltering, targetColIndex);
+    }
 
     /// <summary>
     /// Gets the revision, issue date and issuer from the file header.

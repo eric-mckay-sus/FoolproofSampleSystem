@@ -8,6 +8,11 @@
     <AcceptNPOIOSMFLicense>true</AcceptNPOIOSMFLicense>
   </PropertyGroup>
 
+  <!-- Explicitly allow test project to access things with 'internal' access modifier -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="FoolproofSampleSystem.Tests" />
+  </ItemGroup>
+
   <!-- Only generates the XML doc when in debug mode -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

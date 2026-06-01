@@ -40,17 +40,24 @@ public partial class ZebraPrintFlow
     private readonly IOutputProvider output;
 
     /// <summary>
+    /// Retrieves sample data used to fill label templates.
+    /// </summary>
+    private readonly ISampleLabelSource sampleSource;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ZebraPrintFlow"/> class.
-    /// By default, uses the console for input and output.
+    /// By default, uses the console for I/O, and the DB connection method in <see cref="Config"/> to access sample table.
     /// </summary>
     public ZebraPrintFlow()
     {
         this.input = new ConsoleInputProvider();
         this.output = new ConsoleReporter();
+        this.sampleSource = new SqlSampleLabelSource();
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ZebraPrintFlow"/> class, using the specified input and output providers.
+    /// By default, uses DB connection method in <see cref="Config"/> to access sample table.
     /// </summary>
     /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
     /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
@@ -58,6 +65,20 @@ public partial class ZebraPrintFlow
     {
         this.input = inputProvider;
         this.output = outputProvider;
+        this.sampleSource = new SqlSampleLabelSource();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ZebraPrintFlow"/> class, using the specified input/output providers and sample data source.
+    /// </summary>
+    /// <param name="inputProvider">The instance of IInputProvider to be used to get input regarding FP sheet details.</param>
+    /// <param name="outputProvider">The instance of IReportOutputProvider to be used for displaying program results.</param>
+    /// <param name="sampleLabelSource">The source of sample data for label rendering.</param>
+    public ZebraPrintFlow(IInputProvider inputProvider, IOutputProvider outputProvider, ISampleLabelSource sampleLabelSource)
+    {
+        this.input = inputProvider;
+        this.output = outputProvider;
+        this.sampleSource = sampleLabelSource;
     }
 
     /// <summary>

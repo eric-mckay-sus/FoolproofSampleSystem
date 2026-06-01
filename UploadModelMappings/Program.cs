@@ -125,6 +125,19 @@ public class ModelMappingUploader
     }
 
     /// <summary>
+    /// Parses model mapping rows from a CSV file without changing database state.
+    /// </summary>
+    /// <param name="filepath">The path of the CSV to parse.</param>
+    /// <returns>The parsed model rows.</returns>
+    public static IReadOnlyList<ModelInfo> ParseMappings(string filepath)
+    {
+        using StreamReader reader = new (filepath);
+        using CsvReader csv = new (reader, CultureInfo.InvariantCulture);
+        csv.Context.RegisterClassMap<ModelInfoMap>();
+        return csv.GetRecords<ModelInfo>().ToList();
+    }
+
+    /// <summary>
     /// Identifies input location, verifies that it is a file, then delegates to the upload handler.
     /// Recommended entry point for other programs which use this one.
     /// </summary>
