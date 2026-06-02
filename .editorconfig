@@ -163,6 +163,9 @@ dotnet_diagnostic.SA1009.severity = none
 # SA1010: Opening square brackets should be preceded by a space - not when an indexer
 dotnet_diagnostic.SA1010.severity = none
 
+# SA1011: Closing square brackets should be spaced correctly - not for nullable array
+dotnet_diagnostic.SA1011.severity = silent
+
 # SA1314: Type parameter names should begin with T - not if there's a better name
 dotnet_diagnostic.SA1314.severity = none
 

@@ -8,8 +8,16 @@ using Microsoft.EntityFrameworkCore;
 using SampleManagement;
 using SampleManagement.Components.Pages;
 
+/// <summary>
+/// Tests for the complex logic in the sample management app.
+/// </summary>
 public sealed class SampleManagementTests
 {
+    /// <summary>
+    /// Verifies that toggling an ascending sort turns it to descending,
+    /// toggling a descending sort turns it off with direction none,
+    /// and toggling a none-direction sort turns it to ascending.
+    /// </summary>
     [Fact]
     public void Sort_ToggleCyclesThroughDirections()
     {
@@ -20,8 +28,15 @@ public sealed class SampleManagementTests
 
         Assert.False(sort.Toggle());
         Assert.Equal(SortDir.None, sort.Direction);
+
+        Assert.True(sort.Toggle());
+        Assert.Equal(SortDir.Asc, sort.Direction);
     }
 
+    /// <summary>
+    /// Verifies that filters mark themselves as active when they have content,
+    /// and resetting a filter clears its value, thus marking it as inactive.
+    /// </summary>
     [Fact]
     public void Filter_TracksActivityAndCanReset()
     {
@@ -41,6 +56,10 @@ public sealed class SampleManagementTests
         Assert.Null(filter.Value);
     }
 
+    /// <summary>
+    /// Verifies that toggling sorts changes the stored icon without interacting with the DB.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task ToggleSort_CyclesIconsWithoutRefreshingLocalhostOrDatabase()
     {
@@ -58,8 +77,12 @@ public sealed class SampleManagementTests
 
         await table.ToggleSort("Model");
         Assert.Equal("↕", table.GetSortIcon("Model"));
+        Assert.Equal("▲", table.GetSortIcon("Line")); // Automatically promote secondary when primary goes to none
     }
 
+    /// <summary>
+    /// Verifies that applying filters on the sample approval page applies both the implicit filter (approverNum = null) and any explicit filters (model/line).
+    /// </summary>
     [Fact]
     public void ApproveSamplesApplyFilters_ReturnsOnlyUnapprovedRowsMatchingModelAndLine()
     {
@@ -81,6 +104,9 @@ public sealed class SampleManagementTests
         Assert.Equal([1], visibleIds);
     }
 
+    /// <summary>
+    /// Verifies that applying filters on the sample creation page applies both the implicit filter (approverNum = null) and any explicit filters (model/line).
+    /// </summary>
     [Fact]
     public void CreateSampleApplyFilters_ReturnsOnlyUnapprovedRowsMatchingModelAndLine()
     {
@@ -102,6 +128,10 @@ public sealed class SampleManagementTests
         Assert.Equal([1], visibleIds);
     }
 
+    /// <summary>
+    /// Verifies that the in-memory DB is operational.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task DbContext_CanUseInMemoryDatabaseForSampleQueries()
     {

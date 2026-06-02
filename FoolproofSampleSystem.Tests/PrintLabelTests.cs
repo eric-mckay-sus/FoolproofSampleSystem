@@ -8,10 +8,17 @@ using System.Text;
 using InterProcessIO;
 using PrintLabel;
 
+/// <summary>
+/// Tests for the label printing logic.
+/// </summary>
 public sealed class PrintLabelTests
 {
+    /// <summary>
+    /// Verifies that <see cref="ZebraPrintFlow.BuildZplCommand"/> correctly loads a template file.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
-    public async Task BuildZplCommandAsync_RendersTemplateWithoutOpeningPrinterConnection()
+    public async Task BuildZplCommand_RendersTemplateWithoutOpeningPrinterConnection()
     {
         string templatePath = Path.Combine(Path.GetTempPath(), $"label-{Guid.NewGuid():N}.zpl");
         await File.WriteAllTextAsync(templatePath, "^XA^FD{0}-{1}^FS^XZ");
@@ -29,6 +36,10 @@ public sealed class PrintLabelTests
         }
     }
 
+    /// <summary>
+    /// Verifies that <see cref="ZebraPrintFlow.PrintAsync"/> writes to the provided stream.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task PrintAsync_WritesToProvidedStreamInsteadOfOpeningPrinterConnection()
     {
@@ -55,6 +66,10 @@ public sealed class PrintLabelTests
         }
     }
 
+    /// <summary>
+    /// Verifies that when the printer gets a bad DPI, no print is attempted.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task PrintAsync_InvalidDpiReportsAndDoesNotWrite()
     {
@@ -68,6 +83,10 @@ public sealed class PrintLabelTests
         Assert.Contains(output.Reports, report => report.message.Contains("no configured option", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Verifies that providing a non-integer sample ID is immediately rejected.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task PromptPrint_RejectsMissingSampleBeforeWritingCommand()
     {
@@ -83,6 +102,10 @@ public sealed class PrintLabelTests
         Assert.Equal(3, input.InputRequests.Count);
     }
 
+    /// <summary>
+    /// Verifies that providing a sample ID that could be valid, but is absent from the data source is rejected.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task PromptPrint_RejectsUnknownSampleId()
     {

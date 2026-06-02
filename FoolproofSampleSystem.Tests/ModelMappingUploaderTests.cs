@@ -7,13 +7,20 @@ namespace FoolproofSampleSystem.Tests;
 using InterProcessIO;
 using UploadModelMappings;
 
+/// <summary>
+/// Tests for the model mapping uploader.
+/// </summary>
 public sealed class ModelMappingUploaderTests
 {
+    /// <summary>
+    /// Verifies that <see cref="ModelMappingUploader.ParseMappings"/> identifies expected columns.
+    /// </summary>
     [Fact]
     public void ParseMappings_MapsExpectedColumns()
     {
         string csvPath = Path.Combine(Path.GetTempPath(), $"model-map-{Guid.NewGuid():N}.csv");
-        File.WriteAllText(csvPath, string.Join(Environment.NewLine,
+        File.WriteAllText(csvPath, string.Join(
+            Environment.NewLine,
             "INTERNAL_PART_#,SHORT_DESC,PROD_CELL_CODE,WORK_CENTER_CODE,DESCRIPTION",
             "ICS-1,Model A,PC01,LINE-1,Full Model A",
             "ICS-2,Model B,PC02,LINE-2,Full Model B"));
@@ -35,11 +42,16 @@ public sealed class ModelMappingUploaderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the upload is abbreviated before DB interaction when the overwrite confirmation is denied.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task ExecuteAsync_ReturnsCanceledBeforeOpeningDatabase_WhenOverwriteIsRejected()
     {
         string csvPath = Path.Combine(Path.GetTempPath(), $"model-map-{Guid.NewGuid():N}.csv");
-        File.WriteAllText(csvPath, string.Join(Environment.NewLine,
+        await File.WriteAllTextAsync(csvPath, string.Join(
+            Environment.NewLine,
             "INTERNAL_PART_#,SHORT_DESC,PROD_CELL_CODE,WORK_CENTER_CODE,DESCRIPTION",
             "ICS-1,Model A,PC01,LINE-1,Full Model A"));
         CapturingOutputProvider output = new ();
@@ -58,6 +70,10 @@ public sealed class ModelMappingUploaderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the uploader rejects non-CSV files.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task ExecuteAsync_ReturnsErroredOut_WhenExtensionIsNotCsv()
     {

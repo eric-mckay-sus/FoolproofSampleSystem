@@ -48,6 +48,54 @@ public static class DbUploadUtilities
     }
 
     /// <summary>
+    /// Attempts to upload all contents of <paramref name="dt"/> over <paramref name="conn"/>.
+    /// First attempts a standard SqlBulkCopy for speed, but if that fails, falls back to row-by row for granularity.
+    /// </summary>
+    /// <param name="dt">The DataTable to upload.</param>
+    /// <param name="conn">The SqlConnection used to connect to the database.</param>
+    /// <returns>A Task containing the <see cref="ParseResult"/> signifying the success/failure of the upload, and a stack containing error reports.</returns>
+    public static async Task<(ParseResult, Stack<Report>)> AttemptUpload(DataTable dt, SqlConnection conn)
+    {
+        try
+        {
+            // Attempt a bulk copy
+            await ExecuteBulkCopy(dt, conn);
+            return default;
+        }
+        catch (Exception)
+        {
+            // If bulk copy fails, fall back to row-by-row to find the culprit
+            Stack<Report> reportStack = new (); // Use a stack to ensure the skips are printed in the order they appear in the file
+            ParseResult parseResult = default;
+
+            // Iterate in reverse to guarantee indices don't move on deletion
+            for (int i = dt.Rows.Count - 1; i >= 0; i--)
+            {
+                DataRow dr = dt.Rows[i];
+
+                (ParseResult rowResult, Report? skipReport) = await TryWriteRow(dr, conn);
+                parseResult |= rowResult;
+
+                if (skipReport != null)
+                {
+                    reportStack.Push(skipReport);
+                    dt.Rows.RemoveAt(i); // remove the problem row
+                }
+            }
+
+            reportStack.Push(new ("\t[BULK FAILED] One or more entries in this file could not be added to the database. Switching insertion modes for error reporting...\n", ReportLevel.WARNING));
+
+            // If there are no more rows in the original DataTable, every one was a duplicate.
+            if (dt.Rows.Count == 0)
+            {
+                parseResult |= new ParseResult(alreadyUploaded: true);
+            }
+
+            return (parseResult, reportStack);
+        }
+    }
+
+    /// <summary>
     /// Copies the contents of <paramref name="dt"/> to the foolproof info table over <paramref name="conn"/>.
     /// </summary>
     /// <param name="dt">The DataTable to be uploaded to the foolproof info table.</param>

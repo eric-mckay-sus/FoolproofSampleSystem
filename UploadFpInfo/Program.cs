@@ -190,53 +190,6 @@ public class FPSheetUploader
     }
 
     /// <summary>
-    /// Processes a batch of FP info files.
-    /// </summary>
-    /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error.</returns>
-    private async Task<ParseResult> RunBatch(string directoryPath)
-    {
-        DirectoryInfo inputDir = new (directoryPath);
-
-        FileInfo[] files = inputDir.GetFiles("*.xlsx")
-                            .Concat(inputDir.GetFiles("*.xls"))
-                            .OrderBy(f => f.Name)
-                            .ToArray();
-
-        if (files.Length == 0)
-        {
-            await this.Report("No Excel files found.", ReportLevel.ERROR);
-            return default;
-        }
-
-        await this.Report($"Found {files.Length} files. Starting upload to database...\n");
-
-        ParseResult fileResult = default;
-        ParseResult batchResult = default;
-        foreach (FileInfo file in files)
-        {
-            try
-            {
-                fileResult = await this.ProcessFile(file.FullName);
-
-                // Use fileResult as a bitmask to apply new errors to the batch result (see overloaded OR operator in ParseResult)
-                batchResult |= fileResult;
-            }
-            catch (FormatException f)
-            {
-                await this.Report($"\t[INVALID FORMAT] {f.Message}\n", ReportLevel.ERROR);
-                batchResult |= new ParseResult(hasFormatError: true);
-            }
-            catch (Exception ex)
-            {
-                await this.Report($"\t[SKIP] {ex.Message}\n", ReportLevel.ERROR);
-                batchResult |= new ParseResult(hasMiscError: true);
-            }
-        }
-
-        return batchResult;
-    }
-
-    /// <summary>
     /// Processes one FP info file.
     /// </summary>
     /// <param name="path">The path to the file to be processed.</param>
@@ -283,11 +236,17 @@ public class FPSheetUploader
             // Initialize DataTable for rows
             DataTable dt = BuildDataTableFromSheet(sheet, metadata, colMap, isFiltering, targetColIndex);
 
+            Stack<Report> reportStack = new ();
             if (dt.Rows.Count > 0)
             {
-                parseResult = this.uploadOverride != null
-                    ? await this.uploadOverride(dt)
-                    : await this.AttemptUpload(dt, conn!);
+                if (this.uploadOverride != null)
+                {
+                    parseResult = await this.uploadOverride(dt);
+                }
+                else
+                {
+                    (parseResult, reportStack) = await AttemptUpload(dt, conn!);
+                }
             }
 
             // If every row was duplicate, assume the file was already uploaded for this model.
@@ -295,6 +254,14 @@ public class FPSheetUploader
             {
                 await this.Report($"\tThis portion of {GetFileName(path)} has already been uploaded under {metadata.Model}, so it has been skipped.\n", ReportLevel.WARNING);
                 parseResult |= new ParseResult { alreadyUploaded = true };
+            }
+            else if (dt.Rows.Count > 0)
+            {
+                while (reportStack.Count > 0)
+                {
+                    Report current = reportStack.Pop();
+                    await this.Report(current.message, current.level);
+                }
             }
 
             // Report parse success/failure
@@ -331,57 +298,50 @@ public class FPSheetUploader
     }
 
     /// <summary>
-    /// Attempts to upload all contents of <paramref name="dt"/> over <paramref name="conn"/>.
-    /// First attempts a standard SqlBulkCopy for speed, but if that fails, falls back to row-by row for granularity.
+    /// Processes a batch of FP info files.
     /// </summary>
-    /// <param name="dt">The DataTable to upload.</param>
-    /// <param name="conn">The SqlConnection used to connect to the database.</param>
-    /// <returns>A Task containing the <see cref="ParseResult"/> signifying the success/failure of the upload.</returns>
-    private async Task<ParseResult> AttemptUpload(DataTable dt, SqlConnection conn)
+    /// <returns>An tuple representing whether the batch contains a file that 1) contains PK collision(s) and 2) has a miscellaneous error.</returns>
+    private async Task<ParseResult> RunBatch(string directoryPath)
     {
-        try
+        DirectoryInfo inputDir = new (directoryPath);
+
+        FileInfo[] files = inputDir.GetFiles("*.xlsx")
+                            .Concat(inputDir.GetFiles("*.xls"))
+                            .OrderBy(f => f.Name)
+                            .ToArray();
+
+        if (files.Length == 0)
         {
-            // Attempt a bulk copy
-            await ExecuteBulkCopy(dt, conn);
+            await this.Report("No Excel files found.", ReportLevel.ERROR);
             return default;
         }
-        catch (Exception)
+
+        await this.Report($"Found {files.Length} files. Starting upload to database...\n");
+
+        ParseResult fileResult = default;
+        ParseResult batchResult = default;
+        foreach (FileInfo file in files)
         {
-            // If bulk copy fails, fall back to row-by-row to find the culprit
-            await this.Report("\t[BULK FAILED] One or more entries in this file could not be added to the database. Switching insertion modes for error reporting...\n", ReportLevel.WARNING);
-            Stack<Report> rowSkipStack = new (); // Use a stack to ensure the skips are printed in the order they appear in the file
-            ParseResult parseResult = default;
-
-            // Iterate in reverse to guarantee indices don't move on deletion
-            for (int i = dt.Rows.Count - 1; i >= 0; i--)
+            try
             {
-                DataRow dr = dt.Rows[i];
+                fileResult = await this.ProcessFile(file.FullName);
 
-                (ParseResult rowResult, Report? skipReport) = await TryWriteRow(dr, conn);
-                parseResult |= rowResult;
-
-                if (skipReport != null)
-                {
-                    rowSkipStack.Push(skipReport);
-                    dt.Rows.RemoveAt(i); // remove the problem row
-                }
+                // Use fileResult as a bitmask to apply new errors to the batch result (see overloaded OR operator in ParseResult)
+                batchResult |= fileResult;
             }
-
-            if (dt.Rows.Count > 0)
+            catch (FormatException f)
             {
-                while (rowSkipStack.Count > 0)
-                {
-                    Report current = rowSkipStack.Pop();
-                    await this.Report(current.message, current.level);
-                }
+                await this.Report($"\t[INVALID FORMAT] {f.Message}\n", ReportLevel.ERROR);
+                batchResult |= new ParseResult(hasFormatError: true);
             }
-            else
+            catch (Exception ex)
             {
-                parseResult |= new ParseResult(alreadyUploaded: true);
+                await this.Report($"\t[SKIP] {ex.Message}\n", ReportLevel.ERROR);
+                batchResult |= new ParseResult(hasMiscError: true);
             }
-
-            return parseResult;
         }
+
+        return batchResult;
     }
 
     /// <summary>

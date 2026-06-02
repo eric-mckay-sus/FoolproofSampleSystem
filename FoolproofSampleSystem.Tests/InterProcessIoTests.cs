@@ -6,8 +6,14 @@ namespace FoolproofSampleSystem.Tests;
 
 using InterProcessIO;
 
+/// <summary>
+/// Tests for the inter-process I/O providers.
+/// </summary>
 public sealed class InterProcessIoTests
 {
+    /// <summary>
+    /// Verifies that the overridden OR operator takes the union of each flag.
+    /// </summary>
     [Fact]
     public void ParseResult_OrOperatorCombinesFlags()
     {

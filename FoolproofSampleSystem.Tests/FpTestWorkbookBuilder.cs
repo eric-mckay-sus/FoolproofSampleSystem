@@ -10,8 +10,19 @@ using NPOI.XSSF.UserModel;
 
 using static UploadFpInfo.NpoiEtlUtilities;
 
+/// <summary>
+/// Excel workbook creator for testing the FP data sheet uploader.
+/// </summary>
 internal static class FpTestWorkbookBuilder
 {
+    /// <summary>
+    /// Creates a Excel workbook with a header constructed from the necessary information.
+    /// </summary>
+    /// <param name="revision">The revision to use.</param>
+    /// <param name="issueDate">The issue date to use.</param>
+    /// <param name="issuer">The issuer name to use.</param>
+    /// <param name="rows">The number of blank rows to add.</param>
+    /// <returns>The path to the new workbook.</returns>
     public static string CreateWorkbook(
         string revision = "REV1",
         string issueDate = "2026-01-15",
@@ -45,12 +56,23 @@ internal static class FpTestWorkbookBuilder
         return path;
     }
 
+    /// <summary>
+    /// Gets a list of default row data of the correct shape.
+    /// </summary>
+    /// <returns>The list of default row data.</returns>
     private static IEnumerable<(string, string, string, string, string?)> DefaultRows() =>
     [
         ("Crack", "A", "Press 1", "#12 required", null),
         ("Warp", "B", "Press 2", "dummy sample 34", "X"),
     ];
 
+    /// <summary>
+    /// Writes metadata to the correct location in the provided <paramref name="sheet"/>.
+    /// </summary>
+    /// <param name="sheet">The ISheet instance to write to.</param>
+    /// <param name="revision">The revision number to use.</param>
+    /// <param name="issueDate">The issue date to use.</param>
+    /// <param name="issuer">The issuer name to use.</param>
     private static void WriteMetadataRow(ISheet sheet, string revision, string issueDate, string issuer)
     {
         IRow row = sheet.CreateRow(Config.GlobalStartRow - 1);
@@ -59,6 +81,11 @@ internal static class FpTestWorkbookBuilder
         row.CreateCell(ColumnIndex(Config.GlobalColumns[2])).SetCellValue(issuer);
     }
 
+    /// <summary>
+    /// Writes data header rows to the correct location in the provided <paramref name="sheet"/>.
+    /// </summary>
+    /// <param name="sheet">The ISheet instance to write to.</param>
+    /// <returns>The dictionary mapping header names to indices.</returns>
     private static Dictionary<string, int> WriteHeaderRow(ISheet sheet)
     {
         IRow row = sheet.CreateRow(Config.DataHeaderRow - 1);

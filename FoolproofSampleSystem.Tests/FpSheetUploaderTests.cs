@@ -8,12 +8,19 @@ using System.Data;
 using InterProcessIO;
 using UploadFpInfo;
 
+/// <summary>
+/// Tests for the FP data sheet uploader.
+/// </summary>
 public sealed class FpSheetUploaderTests
 {
+    /// <summary>
+    /// Verifies that the uploader only accepts .xls and .xlsx files.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task ExecuteAsync_ReturnsErroredOut_WhenPathIsNotAnExcelFile()
     {
-        string textPath = Path.Combine(Path.GetTempPath(), $"fp-{Guid.NewGuid():N}.txt");
+        string textPath = Path.Combine(Path.GetTempPath(), $"fp-{Guid.NewGuid():N}.csv");
         await File.WriteAllTextAsync(textPath, "not an excel file");
         CapturingOutputProvider output = new ();
         FPSheetUploader uploader = new (new QueueInputProvider(), output);
@@ -30,6 +37,41 @@ public sealed class FpSheetUploaderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that <see cref="FPSheetUploader.ProcessFile"/> exits early when the user chooses to skip the file.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
+    [Fact]
+    public async Task ProcessFile_SkipsFileWhenUserEntersSkip()
+    {
+        string workbookPath = FpTestWorkbookBuilder.CreateWorkbook();
+        CapturingOutputProvider output = new ();
+        FPSheetUploader uploader = new (
+            new QueueInputProvider(["SKIP"]),
+            output,
+            new FixedModelValidator("ALPHA"),
+            dt => Task.FromResult(default(ParseResult)));
+
+        try
+        {
+            ParseResult result = await uploader.ProcessFile(workbookPath);
+
+            Assert.False(result.HasDuplicate);
+            Assert.False(result.HasFormatError);
+            Assert.False(result.HasMiscError);
+            Assert.Contains(ProgressEvent.FileSkipped, output.ProgressEvents);
+            Assert.Empty(output.Previews);
+        }
+        finally
+        {
+            File.Delete(workbookPath);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that <see cref="FPSheetUploader.ProcessFile"/> builds the correct DataTable for upload.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task ProcessFile_BuildsExpectedRowsWithoutOpeningDatabase()
     {
@@ -64,6 +106,10 @@ public sealed class FpSheetUploaderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that <see cref="FPSheetUploader.ProcessFile"/> only regards rows with data in the target column when a column filter is provided.
+    /// </summary>
+    /// <returns><inheritdoc/></returns>
     [Fact]
     public async Task ProcessFile_AppliesColumnFilterBeforeUpload()
     {
