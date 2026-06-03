@@ -3,6 +3,7 @@
 // </copyright>
 
 namespace SampleManagement.Components.Pages;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ToastType = BlazorBootstrap.ToastType;
@@ -10,6 +11,7 @@ using ToastType = BlazorBootstrap.ToastType;
 using PrintLabel;
 using InterProcessIO;
 using System.Net.Sockets;
+using Microsoft.AspNetCore.Components.Forms;
 
 /// <summary>
 /// Code-behind for the CreateSample page.
@@ -17,14 +19,16 @@ using System.Net.Sockets;
 public partial class CreateSample : TableManager<Sample>
 {
     /// <summary>
+    /// The pending sample to be added upon validation.
+    /// </summary>
+    private readonly SampleFormData formData = new ();
+
+    /// <summary>
     /// Materialized list of all distinct model-line pairs in the MTL table for simple filtering without DB interaction.
     /// </summary>
     private IList<(string Model, string Line)> allMappings = [];
 
-    /// <summary>
-    /// The pending sample to be added upon validation.
-    /// </summary>
-    private SampleFormData formData = new ();
+    private EditContext? editContext;
 
     // Filtered lists to use for autofill
 
@@ -118,7 +122,8 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     private bool NotReadyForSampleNum =>
         string.IsNullOrWhiteSpace(this.formData.Model) ||
-        string.IsNullOrWhiteSpace(this.formData.WorkCenterCode);
+        string.IsNullOrWhiteSpace(this.formData.WorkCenterCode) ||
+        this.availableSampleNums.Count == 0;
 
     /// <summary>
     /// Gets a value indicating whether the sample form is ready for associate signature.
@@ -161,6 +166,8 @@ public partial class CreateSample : TableManager<Sample>
                                     .Distinct()
                                     .OrderBy(x => x)
                                     .ToList();
+
+        this.editContext = new (this.formData);
 
         this.SortList.Add(new ("CreationDate", SortDir.Desc));
         this.SortList.Add(new ("SampleId", SortDir.Desc));
@@ -282,6 +289,30 @@ public partial class CreateSample : TableManager<Sample>
             this.availableSampleNums.Clear();
             this.formData.DummySampleNum = 0;
         }
+
+        if (this.NotReadyForSampleNum)
+        {
+            this.formData.DummySampleNum = 0;
+
+            if (this.editContext != null)
+            {
+                var fieldIdentifier = FieldIdentifier.Create(() => this.formData.DummySampleNum);
+
+                this.editContext.MarkAsUnmodified(fieldIdentifier);
+            }
+        }
+
+        if (this.NotReadyForSignature)
+        {
+            this.formData.CreatorNum = null;
+
+            if (this.editContext != null)
+            {
+                var fieldIdentifier = FieldIdentifier.Create(() => this.formData.CreatorNum);
+
+                this.editContext.MarkAsUnmodified(fieldIdentifier);
+            }
+        }
     }
 
     private void TogglePrintMode()
@@ -311,6 +342,13 @@ public partial class CreateSample : TableManager<Sample>
     private async Task HandleSubmit()
     {
         this.errorMessage = null; // Ensure any error messages are for this submission
+
+        // Force the EditContext to execute all validators, including class attributes
+        if (this.editContext == null || !this.editContext.Validate())
+        {
+            this.ToastService.Notify(new (ToastType.Danger, "Please fix the validation errors before submitting."));
+            return; // Stop execution if class or field validation fails
+        }
 
         try
         {
@@ -479,26 +517,37 @@ public partial class CreateSample : TableManager<Sample>
     /// <summary>
     /// Represents the data enclosed in the sample addition form
     /// </summary>
+    [ValidateModelLineExists]
     public record SampleFormData
     {
         /// <summary>
         /// Gets or sets the new sample's model.
         /// </summary>
+        [Required(ErrorMessage = "Model is required.")]
+        [MaxLength(32, ErrorMessage = "Model must be 32 characters or fewer.")]
+        [ValidateModelExists]
         public string Model { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the new sample's work center code (building and line name).
         /// </summary>
+        [Required(ErrorMessage = "Line is required.")]
+        [MaxLength(30, ErrorMessage = "Line must be 30 characters or fewer.")]
+        [ValidateLineExists]
         public string WorkCenterCode { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the new sample's dummy sample number.
+        /// Could validate that dummy sample number exists for model, but that's implicit in the provided choices, so it would never trigger.
         /// </summary>
+        [Range(1, short.MaxValue, ErrorMessage = "Dummy sample number must be selected.")]
         public short DummySampleNum { get; set; } = 0;
 
         /// <summary>
         /// Gets or sets the new sample's creator name.
         /// </summary>
+        [Required(ErrorMessage = "Associate number is required.")]
+        [ValidateCreatorExists]
         public int? CreatorNum { get; set; }
     }
 }
