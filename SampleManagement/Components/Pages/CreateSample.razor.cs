@@ -128,7 +128,7 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     private bool NotReadyForSampleNum =>
         string.IsNullOrWhiteSpace(this.formData.Model) ||
-        string.IsNullOrWhiteSpace(this.formData.WorkCenterCode) ||
+        string.IsNullOrWhiteSpace(this.formData.Line) ||
         this.availableSampleNums.Count == 0;
 
     /// <summary>
@@ -218,7 +218,7 @@ public partial class CreateSample : TableManager<Sample>
             (SqlConnection)context.Database.GetDbConnection());
 
         cmd.Parameters.AddWithValue("@model", data.Model);
-        cmd.Parameters.AddWithValue("@workCenterCode", data.WorkCenterCode);
+        cmd.Parameters.AddWithValue("@workCenterCode", data.Line);
         cmd.Parameters.AddWithValue("@dummySampleNum", data.DummySampleNum);
         cmd.Parameters.AddWithValue("@creatorNum", data.CreatorNum);
 
@@ -242,7 +242,7 @@ public partial class CreateSample : TableManager<Sample>
 
         // Normalize inputs to handle casing and extra whitespace
         string searchModel = this.formData.Model.Trim();
-        string searchLine = this.formData.WorkCenterCode.Trim();
+        string searchLine = this.formData.Line.Trim();
 
         bool hasModel = !string.IsNullOrEmpty(searchModel);
         bool hasLine = !string.IsNullOrEmpty(searchLine);
@@ -327,20 +327,33 @@ public partial class CreateSample : TableManager<Sample>
             var classFieldIdentifier = new FieldIdentifier(this.formData, string.Empty);
             this.messageStore.Clear(classFieldIdentifier);
 
-            // Only run if both fields contain text
+            // Only check for model-line match if both model & line are presetn
             if (!string.IsNullOrWhiteSpace(this.formData.Model) &&
-                !string.IsNullOrWhiteSpace(this.formData.WorkCenterCode))
+                !string.IsNullOrWhiteSpace(this.formData.Line))
             {
-                // Instantiating your custom class attribute manually
-                var crossValidator = new ValidateModelLineExistsAttribute();
+                // Validate the entire object container's properties into a temporary list
+                var validationResults = new List<ValidationResult>();
                 var validationContext = new ValidationContext(this.formData, this.ServiceProvider, null);
 
-                ValidationResult? result = crossValidator.GetValidationResult(this.formData, validationContext);
+                // validateAllProperties: true tells it to run all property-level validation attributes
+                Validator.TryValidateObject(this.formData, validationContext, validationResults, validateAllProperties: true);
 
-                if (result != ValidationResult.Success && !string.IsNullOrEmpty(result?.ErrorMessage))
+                // Check if either 'Model' or 'Line' has any property-level errors logged against them
+                bool isModelValid = !validationResults.Any(r => r.MemberNames.Contains(nameof(SampleFormData.Model)));
+                bool isLineValid = !validationResults.Any(r => r.MemberNames.Contains(nameof(SampleFormData.Line)));
+
+                // Model & line must be individually valid to even merit the cross-check
+                if (isModelValid && isLineValid)
                 {
-                    // Attach the error to the object container level (empty string property)
-                    this.messageStore.Add(classFieldIdentifier, result.ErrorMessage);
+                    var crossValidator = new ValidateModelLineExistsAttribute();
+                    var crossContext = new ValidationContext(this.formData, this.ServiceProvider, null);
+
+                    ValidationResult? result = crossValidator.GetValidationResult(this.formData, crossContext);
+
+                    if (result != ValidationResult.Success && !string.IsNullOrEmpty(result?.ErrorMessage))
+                    {
+                        this.messageStore.Add(classFieldIdentifier, result.ErrorMessage);
+                    }
                 }
             }
 
@@ -546,42 +559,5 @@ public partial class CreateSample : TableManager<Sample>
             this.printCts = null;
             this.isPrinting = false;
         }
-    }
-
-    /// <summary>
-    /// Represents the data enclosed in the sample addition form
-    /// </summary>
-    [ValidateModelLineExists]
-    public record SampleFormData
-    {
-        /// <summary>
-        /// Gets or sets the new sample's model.
-        /// </summary>
-        [Required(ErrorMessage = "Model is required.")]
-        [MaxLength(32, ErrorMessage = "Model must be 32 characters or fewer.")]
-        [ValidateModelExists]
-        public string Model { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the new sample's work center code (building and line name).
-        /// </summary>
-        [Required(ErrorMessage = "Line is required.")]
-        [MaxLength(30, ErrorMessage = "Line must be 30 characters or fewer.")]
-        [ValidateLineExists]
-        public string WorkCenterCode { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the new sample's dummy sample number.
-        /// Could validate that dummy sample number exists for model, but that's implicit in the provided choices, so it would never trigger.
-        /// </summary>
-        [Range(1, short.MaxValue, ErrorMessage = "Dummy sample number must be selected.")]
-        public short DummySampleNum { get; set; } = 0;
-
-        /// <summary>
-        /// Gets or sets the new sample's creator name.
-        /// </summary>
-        [Required(ErrorMessage = "Associate number is required.")]
-        [ValidateCreatorExists]
-        public int? CreatorNum { get; set; }
     }
 }

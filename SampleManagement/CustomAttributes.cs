@@ -5,7 +5,6 @@
 namespace SampleManagement;
 
 using System.ComponentModel.DataAnnotations;
-using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 
 /// <summary>
@@ -17,11 +16,17 @@ public class VerboseAttribute : Attribute
 }
 
 /// <summary>
-/// Validates that a creator exists in the associate database.
+/// Validates that a sample's creator exists.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
 public class ValidateCreatorExistsAttribute : ValidationAttribute
 {
+    /// <summary>
+    /// Checks the new sample's creator signature against the database.
+    /// </summary>
+    /// <param name="value">The value to validate.</param>
+    /// <param name="validationContext">The metadata for the validation.</param>
+    /// <returns>ValidationResult.Success if the associate was found, otherwise a validation result reporting the failure.</returns>
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
         if (value is not int creatorNum)
@@ -47,6 +52,12 @@ public class ValidateCreatorExistsAttribute : ValidationAttribute
 [AttributeUsage(AttributeTargets.Property)]
 public class ValidateModelExistsAttribute : ValidationAttribute
 {
+    /// <summary>
+    /// Checks the new sample's model against the database.
+    /// </summary>
+    /// <param name="value">The value to validate.</param>
+    /// <param name="validationContext">The metadata for the validation.</param>
+    /// <returns>ValidationResult.Success if the model was found, otherwise a validation result reporting the failure.</returns>
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
         if (value is not string modelName)
@@ -59,7 +70,7 @@ public class ValidateModelExistsAttribute : ValidationAttribute
 
         if (!context.FoolproofInfo.Any(fp => fp.Model == modelName))
         {
-            return new ValidationResult($"Model {modelName} does not exist.", new[] { validationContext.MemberName ?? string.Empty });
+            return new ValidationResult($"There are no foolproof data sheets uploaded for model {modelName}.", new[] { validationContext.MemberName ?? string.Empty });
         }
 
         return ValidationResult.Success;
@@ -72,6 +83,12 @@ public class ValidateModelExistsAttribute : ValidationAttribute
 [AttributeUsage(AttributeTargets.Property)]
 public class ValidateLineExistsAttribute : ValidationAttribute
 {
+    /// <summary>
+    /// Checks the new sample's line against the database.
+    /// </summary>
+    /// <param name="value">The value to validate.</param>
+    /// <param name="validationContext">The metadata for the validation.</param>
+    /// <returns>ValidationResult.Success if the line was found, otherwise a validation result reporting the failure.</returns>
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
         if (value is not string lineName)
@@ -84,7 +101,7 @@ public class ValidateLineExistsAttribute : ValidationAttribute
 
         if (!context.ModelToLine.Any(mtl => mtl.Line == lineName))
         {
-            return new ValidationResult($"Line {lineName} does not exist.", new[] { validationContext.MemberName ?? string.Empty });
+            return new ValidationResult($"There are no models uploaded that run on line {lineName}.", new[] { validationContext.MemberName ?? string.Empty });
         }
 
         return ValidationResult.Success;
@@ -97,27 +114,27 @@ public class ValidateLineExistsAttribute : ValidationAttribute
 [AttributeUsage(AttributeTargets.Class)]
 public class ValidateModelLineExistsAttribute : ValidationAttribute
 {
+    /// <summary>
+    /// Cross-checks the new sample's model and line against the database.
+    /// </summary>
+    /// <param name="value">The value to validate.</param>
+    /// <param name="validationContext">The metadata for the validation.</param>
+    /// <returns>ValidationResult.Success if the model and line pair was found, otherwise a validation result reporting the failure.</returns>
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
         Console.WriteLine("Executing MTL check...");
-        if (value == null)
+
+        // Pull the strongly-typed instance directly from the context safely
+        if (validationContext.ObjectInstance is not SampleFormData formData)
         {
-            Console.WriteLine("Returned for null value");
+            Console.WriteLine("Returned because ObjectInstance is not SampleFormData");
             return ValidationResult.Success;
         }
 
-        // If one of model or line is empty, there can't be a mismatch
-        PropertyInfo? modelProperty = validationContext.ObjectType.GetProperty("Model");
-        PropertyInfo? lineProperty = validationContext.ObjectType.GetProperty("WorkCenterCode");
-        if (modelProperty == null || lineProperty == null)
-        {
-            Console.WriteLine("Returned for null model or line");
-            return ValidationResult.Success;
-        }
+        // Use the strongly-typed properties directly (No fragile reflection strings!)
+        string? model = formData.Model;
+        string? line = formData.Line;
 
-        // Whitespace also can't violate the model-line match requirement
-        string? model = modelProperty.GetValue(value) as string;
-        string? line = lineProperty.GetValue(value) as string;
         if (string.IsNullOrWhiteSpace(model) || string.IsNullOrWhiteSpace(line))
         {
             Console.WriteLine("Returned for empty model or line");
