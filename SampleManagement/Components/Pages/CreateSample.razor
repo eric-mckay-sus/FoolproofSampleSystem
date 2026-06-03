@@ -14,6 +14,22 @@
                     <EditForm EditContext="editContext" OnSubmit="HandleSubmit" autocomplete="off">
                         <DataAnnotationsValidator />
 
+                        @if (editContext != null)
+                        {
+                            @* Query the editContext for messages tied to the object container itself *@
+                            var classErrors = editContext.GetValidationMessages(new FieldIdentifier(formData, string.Empty));
+
+                            if (classErrors.Any())
+                            {
+                                <div class="alert alert-warning py-2 mt-2">
+                                    @foreach (var error in classErrors)
+                                    {
+                                        <div><i class="bi bi-exclamation-triangle-fill me-2"></i>@error</div>
+                                    }
+                                </div>
+                            }
+                        }
+
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Model</label>
@@ -69,22 +85,6 @@
                                 }
                             </div>
                         </div>
-
-                        @if (editContext != null)
-                        {
-                            @* Query the editContext for messages tied to the object container itself *@
-                            var classErrors = editContext.GetValidationMessages(new FieldIdentifier(formData, string.Empty));
-
-                            if (classErrors.Any())
-                            {
-                                <div class="alert alert-warning py-2 mt-2">
-                                    @foreach (var error in classErrors)
-                                    {
-                                        <div><i class="bi bi-exclamation-triangle-fill me-2"></i>@error</div>
-                                    }
-                                </div>
-                            }
-                        }
 
                         @if (!string.IsNullOrEmpty(errorMessage))
                         {

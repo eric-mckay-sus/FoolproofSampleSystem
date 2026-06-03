@@ -12,6 +12,7 @@ using PrintLabel;
 using InterProcessIO;
 using System.Net.Sockets;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components;
 
 /// <summary>
 /// Code-behind for the CreateSample page.
@@ -29,6 +30,8 @@ public partial class CreateSample : TableManager<Sample>
     private IList<(string Model, string Line)> allMappings = [];
 
     private EditContext? editContext;
+
+    private ValidationMessageStore? messageStore;
 
     // Filtered lists to use for autofill
 
@@ -117,6 +120,9 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     public override string EmptyMessage => "No samples matching these filters.";
 
+    [Inject]
+    private IServiceProvider ServiceProvider { get; set; } = default!;
+
     /// <summary>
     /// Gets a value indicating whether the sample form is ready for a dummy sample number.
     /// </summary>
@@ -139,6 +145,9 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
+        this.editContext = new (this.formData);
+        this.messageStore = new (this.editContext);
+
         // Get all the model-line pairs that have a model in the foolproof sheet database (thus have a dummy sample number)
         using (FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync())
         {
@@ -166,8 +175,6 @@ public partial class CreateSample : TableManager<Sample>
                                     .Distinct()
                                     .OrderBy(x => x)
                                     .ToList();
-
-        this.editContext = new (this.formData);
 
         this.SortList.Add(new ("CreationDate", SortDir.Desc));
         this.SortList.Add(new ("SampleId", SortDir.Desc));
@@ -312,6 +319,33 @@ public partial class CreateSample : TableManager<Sample>
 
                 this.editContext.MarkAsUnmodified(fieldIdentifier);
             }
+        }
+
+        if (this.editContext != null && this.messageStore != null)
+        {
+            // Clear previous class-level errors before re-validating
+            var classFieldIdentifier = new FieldIdentifier(this.formData, string.Empty);
+            this.messageStore.Clear(classFieldIdentifier);
+
+            // Only run if both fields contain text
+            if (!string.IsNullOrWhiteSpace(this.formData.Model) &&
+                !string.IsNullOrWhiteSpace(this.formData.WorkCenterCode))
+            {
+                // Instantiating your custom class attribute manually
+                var crossValidator = new ValidateModelLineExistsAttribute();
+                var validationContext = new ValidationContext(this.formData, this.ServiceProvider, null);
+
+                ValidationResult? result = crossValidator.GetValidationResult(this.formData, validationContext);
+
+                if (result != ValidationResult.Success && !string.IsNullOrEmpty(result?.ErrorMessage))
+                {
+                    // Attach the error to the object container level (empty string property)
+                    this.messageStore.Add(classFieldIdentifier, result.ErrorMessage);
+                }
+            }
+
+            // Notify the UI to re-render validation states
+            this.editContext.NotifyValidationStateChanged();
         }
     }
 
