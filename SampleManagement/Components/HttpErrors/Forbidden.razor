@@ -49,21 +49,11 @@
         // Pull the [Authorize] attributes from that page component
         var authorizeAttributes = targetPageType.GetCustomAttributes<AuthorizeAttribute>(inherit: true);
 
-        foreach (var attr in authorizeAttributes)
-        {
-            if (!string.IsNullOrEmpty(attr.Roles))
-            {
-                var roles = attr.Roles.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                      .Select(r => r.Trim());
-
-                foreach (var role in roles)
-                {
-                    if (!requiredRoles.Contains(role))
-                    {
-                        requiredRoles.Add(role);
-                    }
-                }
-            }
-        }
+        requiredRoles = authorizeAttributes
+        .Where(attr => !string.IsNullOrEmpty(attr.Roles))
+        .SelectMany(attr => attr.Roles!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(role => role.Trim())
+        .Distinct()
+        .ToList();
     }
 }
