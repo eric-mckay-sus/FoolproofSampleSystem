@@ -208,7 +208,7 @@ public class ModelMappingUploader
             await this.output.ReportProgress(ProgressEvent.ClearStarted);
 
             // Now parsing is complete, prepare to completely overwrite old DB state with new
-            using (var deleteCommand = new SqlCommand("TRUNCATE TABLE EL2AuthorizedReset.dbo.ModelToLine", connection, transaction))
+            using (var deleteCommand = new SqlCommand("DELETE FROM EL2AuthorizedReset.dbo.ModelToLine", connection, transaction))
             {
                 await deleteCommand.ExecuteNonQueryAsync();
             }

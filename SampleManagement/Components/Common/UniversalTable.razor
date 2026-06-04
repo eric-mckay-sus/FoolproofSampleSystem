@@ -53,7 +53,7 @@
     </div>
 
 }
-else if (Items != null && Items.Any())
+else if (Items != null)
 {
     <div class="table-responsive-wrapper">
         <table class="table res-table table-striped text-nowrap">
@@ -191,6 +191,12 @@ else if (Items != null && Items.Any())
                 </Virtualize>
             </tbody>
         </table>
+        @if(Items == null || !Items.Any())
+        {
+            <div class="text-center p-5 border rounded bg-light">
+                <p class="text-muted mb-0">@EmptyMessage</p>
+            </div>
+        }
     </div>
 }
 else

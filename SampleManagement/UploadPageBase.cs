@@ -53,11 +53,6 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     protected bool IsProcessingSelection { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the text for the loading bar (from <see cref="TableManager{T}.Reporter"/> ).
-    /// </summary>
-    protected string CurrentDisplayStatus { get; set; } = "Idle";
-
-    /// <summary>
     /// Gets or sets the actual progress through the upload.
     /// </summary>
     protected int ProgressPercent { get; set; } = 0;
