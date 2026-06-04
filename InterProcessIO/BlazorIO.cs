@@ -100,7 +100,7 @@ public class BlazorReporter : IOutputProvider
     /// <summary>
     /// Gets the list of <see cref="Report"/> objects that document a warning or error.
     /// </summary>
-    public IList<Report> Logs { get; private set; } = [];
+    public IList<(TimeOnly time, Report content)> Logs { get; private set; } = [];
 
     /// <summary>
     /// Gets or sets the underlying DataTable object that stores the preview information.
@@ -155,7 +155,7 @@ public class BlazorReporter : IOutputProvider
         // Only log errors to the Blazor interface
         if ((report.level == ReportLevel.WARNING || report.level == ReportLevel.ERROR) && !report.message.Contains("Please try again"))
         {
-            this.Logs.Add(report);
+            this.Logs.Add((TimeOnly.FromDateTime(DateTime.Now), report));
         }
 
         this.OnNotify?.Invoke();

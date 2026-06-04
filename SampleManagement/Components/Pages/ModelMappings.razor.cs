@@ -17,6 +17,11 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     private string? filePath;
 
     /// <summary>
+    /// Gets or sets the text for the loading bar (from <see cref="TableManager{T}.Reporter"/> ).
+    /// </summary>
+    private string currentDisplayStatus = "Idle";
+
+    /// <summary>
     /// Gets the message to show when <see cref="TableManager{T}.DataView"/> is empty.
     /// </summary>
     public override string EmptyMessage => "No model mappings matching these filters.";
@@ -78,6 +83,8 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
     /// <returns>A Task representing whether the upload completion status.</returns>
     protected override async Task<UploadResult> ExecuteUpload()
     {
+        this.Reporter.InitializeProgress(1);
+
         // Improbable, but treat like a cancel
         if (this.selectedFile == null)
         {
@@ -126,13 +133,13 @@ public partial class ModelMappings : UploadPageBase<ModelLine>
             _ => this.ProgressPercent
         };
 
-        this.CurrentDisplayStatus = ev switch
+        this.currentDisplayStatus = ev switch
         {
             ProgressEvent.FileStarted => "Initializing parsing stream...",
             ProgressEvent.ClearStarted => "Clearing existing target tables...",
             ProgressEvent.UploadStarted => "Streaming new mappings to table...",
             ProgressEvent.FileCompleted or ProgressEvent.UploadComplete => "Database successfully updated!",
-            _ => this.CurrentDisplayStatus
+            _ => this.currentDisplayStatus
         };
 
         await this.InvokeAsync(this.StateHasChanged);

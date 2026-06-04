@@ -351,7 +351,6 @@ public class FPSheetUploader
     private async Task<(string, bool, int)> CollectUserInput(string filename, bool isNewModel)
     {
         string? potentialModel;
-        string model = string.Empty;
         string? error = null;
         bool isFiltering = false;
         int targetColIndex = -1;
@@ -370,18 +369,16 @@ public class FPSheetUploader
                 return (potentialModel, isFiltering, targetColIndex);
             }
 
-            potentialModel = await ValidateModel(potentialModel);
+            string? model = await ValidateModel(potentialModel);
 
             // Verify that the model actually exists (this is why the MTL database is prerequisite for this program)
-            if (string.IsNullOrEmpty(potentialModel))
+            if (string.IsNullOrEmpty(model))
             {
-                error = $"{model} is not in the model to line database. Please try again.";
+                error = $"'{potentialModel}' is not in the model to line database. Please try again.";
                 await this.Report($"\t{error}\n", ReportLevel.WARNING);
                 isNewModel = false;
                 continue;
             }
-
-            model = potentialModel;
 
             // After the model has been obtained, get an optional column filter
             (bool isFiltering, int targetColIndex)? filterResult = await this.CollectColumnFilter(model);

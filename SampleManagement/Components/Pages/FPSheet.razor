@@ -1,5 +1,6 @@
 ﻿@page "/foolproof-sheet"
 @using UploadFpInfo
+@using System.Globalization
 @inherits UploadPageBase<FoolproofEntry>
 @implements IDisposable
 
@@ -74,10 +75,10 @@
             <div class="expandable-wrapper @(isLogExpanded ? "is-expanded" : "")">
                 <div class="expandable-content">
                     <div id="log-container" class="log-container">
-                        @foreach (Report log in Reporter.Logs)
+                        @foreach ((TimeOnly time, Report log) in Reporter.Logs)
                         {
                             <div class="log-entry border-bottom border-light py-1">
-                                <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @log.message
+                                <span class="text-muted">[@time.ToString("HH:mm:ss", CultureInfo.InvariantCulture)]</span> @log.message
                             </div>
                         }
                     </div>

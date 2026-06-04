@@ -1,3 +1,4 @@
+@using System.Reflection
 @inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>403 Forbidden</PageTitle>
@@ -6,7 +7,16 @@
     <div class="container-sheet animate-fade-in">
         <h1 class="error-code forbidden-text">403</h1>
     <h2 class="error-title">Forbidden</h2>
-    <p class="error-message">Approver privileges are required for this page.</p>
+    <p class="error-message">
+        @if (requiredRoles.Count > 0)
+        {
+            <span>This page requires the following privilege(s): <strong>@string.Join(", ", requiredRoles)</strong>.</span>
+        }
+        else
+        {
+            <span>You do not have permission to access this page.</span>
+        }
+    </p>
     <div class="user-info">
         Logged in as: <strong>@username</strong>
     </div>
@@ -16,10 +26,34 @@
 
 @code {
     private string username = "User";
+    private List<string> requiredRoles = [];
+
+    [Parameter]
+    public RouteData? TargetRouteData { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         username = authState.User.Identity?.Name ?? "User";
+
+        DetermineRequiredRoles();
+    }
+
+    private void DetermineRequiredRoles()
+    {
+        if (TargetRouteData == null) return;
+
+        // Get the Type of the razor component the user attempted to navigate to
+        var targetPageType = TargetRouteData.PageType;
+
+        // Pull the [Authorize] attributes from that page component
+        var authorizeAttributes = targetPageType.GetCustomAttributes<AuthorizeAttribute>(inherit: true);
+
+        requiredRoles = authorizeAttributes
+        .Where(attr => !string.IsNullOrEmpty(attr.Roles))
+        .SelectMany(attr => attr.Roles!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(role => role.Trim())
+        .Distinct()
+        .ToList();
     }
 }

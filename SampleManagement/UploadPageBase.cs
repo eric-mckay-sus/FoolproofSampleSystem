@@ -53,11 +53,6 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
     protected bool IsProcessingSelection { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the text for the loading bar (from <see cref="TableManager{T}.Reporter"/> ).
-    /// </summary>
-    protected string CurrentDisplayStatus { get; set; } = "Idle";
-
-    /// <summary>
     /// Gets or sets the actual progress through the upload.
     /// </summary>
     protected int ProgressPercent { get; set; } = 0;
@@ -232,7 +227,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
                     this.ToastService.Notify(new (ToastType.Warning, $"{successMessage} with errors. Check the summary table and log to see what didn't go through."));
                     break;
                 case UploadResult.ErroredOut:
-                    Report? error = this.Reporter.Logs.LastOrDefault(log => log.level == ReportLevel.ERROR) ?? this.Reporter.Logs.LastOrDefault();
+                    Report? error = this.Reporter.Logs.Select(log => log.content).LastOrDefault(log => log.level == ReportLevel.ERROR) ?? this.Reporter.Logs.Select(log => log.content).LastOrDefault();
                     this.ToastService.Notify(new (ToastType.Danger, $"{error?.message ?? "There was an error that prevented your upload from completing"}. Please verify your file."));
                     break;
                 case UploadResult.Canceled:

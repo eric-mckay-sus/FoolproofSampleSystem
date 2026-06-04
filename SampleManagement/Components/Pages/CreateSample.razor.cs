@@ -3,6 +3,7 @@
 // </copyright>
 
 namespace SampleManagement.Components.Pages;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using ToastType = BlazorBootstrap.ToastType;
@@ -10,6 +11,8 @@ using ToastType = BlazorBootstrap.ToastType;
 using PrintLabel;
 using InterProcessIO;
 using System.Net.Sockets;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components;
 
 /// <summary>
 /// Code-behind for the CreateSample page.
@@ -17,14 +20,18 @@ using System.Net.Sockets;
 public partial class CreateSample : TableManager<Sample>
 {
     /// <summary>
+    /// The pending sample to be added upon validation.
+    /// </summary>
+    private readonly SampleFormData formData = new ();
+
+    /// <summary>
     /// Materialized list of all distinct model-line pairs in the MTL table for simple filtering without DB interaction.
     /// </summary>
     private IList<(string Model, string Line)> allMappings = [];
 
-    /// <summary>
-    /// The pending sample to be added upon validation.
-    /// </summary>
-    private SampleFormData formData = new ();
+    private EditContext? editContext;
+
+    private ValidationMessageStore? messageStore;
 
     // Filtered lists to use for autofill
 
@@ -113,12 +120,16 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     public override string EmptyMessage => "No samples matching these filters.";
 
+    [Inject]
+    private IServiceProvider ServiceProvider { get; set; } = default!;
+
     /// <summary>
     /// Gets a value indicating whether the sample form is ready for a dummy sample number.
     /// </summary>
     private bool NotReadyForSampleNum =>
         string.IsNullOrWhiteSpace(this.formData.Model) ||
-        string.IsNullOrWhiteSpace(this.formData.WorkCenterCode);
+        string.IsNullOrWhiteSpace(this.formData.Line) ||
+        this.availableSampleNums.Count == 0;
 
     /// <summary>
     /// Gets a value indicating whether the sample form is ready for associate signature.
@@ -134,6 +145,9 @@ public partial class CreateSample : TableManager<Sample>
     /// <returns>A Task representing that the page has loaded.</returns>
     protected override async Task OnInitializedAsync()
     {
+        this.editContext = new (this.formData);
+        this.messageStore = new (this.editContext);
+
         // Get all the model-line pairs that have a model in the foolproof sheet database (thus have a dummy sample number)
         using (FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync())
         {
@@ -204,7 +218,7 @@ public partial class CreateSample : TableManager<Sample>
             (SqlConnection)context.Database.GetDbConnection());
 
         cmd.Parameters.AddWithValue("@model", data.Model);
-        cmd.Parameters.AddWithValue("@workCenterCode", data.WorkCenterCode);
+        cmd.Parameters.AddWithValue("@workCenterCode", data.Line);
         cmd.Parameters.AddWithValue("@dummySampleNum", data.DummySampleNum);
         cmd.Parameters.AddWithValue("@creatorNum", data.CreatorNum);
 
@@ -228,7 +242,7 @@ public partial class CreateSample : TableManager<Sample>
 
         // Normalize inputs to handle casing and extra whitespace
         string searchModel = this.formData.Model.Trim();
-        string searchLine = this.formData.WorkCenterCode.Trim();
+        string searchLine = this.formData.Line.Trim();
 
         bool hasModel = !string.IsNullOrEmpty(searchModel);
         bool hasLine = !string.IsNullOrEmpty(searchLine);
@@ -282,6 +296,70 @@ public partial class CreateSample : TableManager<Sample>
             this.availableSampleNums.Clear();
             this.formData.DummySampleNum = 0;
         }
+
+        if (this.NotReadyForSampleNum)
+        {
+            this.formData.DummySampleNum = 0;
+
+            if (this.editContext != null)
+            {
+                var fieldIdentifier = FieldIdentifier.Create(() => this.formData.DummySampleNum);
+
+                this.editContext.MarkAsUnmodified(fieldIdentifier);
+            }
+        }
+
+        if (this.NotReadyForSignature)
+        {
+            this.formData.CreatorNum = null;
+
+            if (this.editContext != null)
+            {
+                var fieldIdentifier = FieldIdentifier.Create(() => this.formData.CreatorNum);
+
+                this.editContext.MarkAsUnmodified(fieldIdentifier);
+            }
+        }
+
+        if (this.editContext != null && this.messageStore != null)
+        {
+            // Clear previous class-level errors before re-validating
+            var classFieldIdentifier = new FieldIdentifier(this.formData, string.Empty);
+            this.messageStore.Clear(classFieldIdentifier);
+
+            // Only check for model-line match if both model & line are presetn
+            if (!string.IsNullOrWhiteSpace(this.formData.Model) &&
+                !string.IsNullOrWhiteSpace(this.formData.Line))
+            {
+                // Validate the entire object container's properties into a temporary list
+                var validationResults = new List<ValidationResult>();
+                var validationContext = new ValidationContext(this.formData, this.ServiceProvider, null);
+
+                // validateAllProperties: true tells it to run all property-level validation attributes
+                Validator.TryValidateObject(this.formData, validationContext, validationResults, validateAllProperties: true);
+
+                // Check if either 'Model' or 'Line' has any property-level errors logged against them
+                bool isModelValid = !validationResults.Any(r => r.MemberNames.Contains(nameof(SampleFormData.Model)));
+                bool isLineValid = !validationResults.Any(r => r.MemberNames.Contains(nameof(SampleFormData.Line)));
+
+                // Model & line must be individually valid to even merit the cross-check
+                if (isModelValid && isLineValid)
+                {
+                    var crossValidator = new ValidateModelLineExistsAttribute();
+                    var crossContext = new ValidationContext(this.formData, this.ServiceProvider, null);
+
+                    ValidationResult? result = crossValidator.GetValidationResult(this.formData, crossContext);
+
+                    if (result != ValidationResult.Success && !string.IsNullOrEmpty(result?.ErrorMessage))
+                    {
+                        this.messageStore.Add(classFieldIdentifier, result.ErrorMessage);
+                    }
+                }
+            }
+
+            // Notify the UI to re-render validation states
+            this.editContext.NotifyValidationStateChanged();
+        }
     }
 
     private void TogglePrintMode()
@@ -311,6 +389,13 @@ public partial class CreateSample : TableManager<Sample>
     private async Task HandleSubmit()
     {
         this.errorMessage = null; // Ensure any error messages are for this submission
+
+        // Force the EditContext to execute all validators, including class attributes
+        if (this.editContext == null || !this.editContext.Validate())
+        {
+            this.ToastService.Notify(new (ToastType.Danger, "Please fix the validation errors before submitting."));
+            return; // Stop execution if class or field validation fails
+        }
 
         try
         {
@@ -474,31 +559,5 @@ public partial class CreateSample : TableManager<Sample>
             this.printCts = null;
             this.isPrinting = false;
         }
-    }
-
-    /// <summary>
-    /// Represents the data enclosed in the sample addition form
-    /// </summary>
-    public record SampleFormData
-    {
-        /// <summary>
-        /// Gets or sets the new sample's model.
-        /// </summary>
-        public string Model { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the new sample's work center code (building and line name).
-        /// </summary>
-        public string WorkCenterCode { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the new sample's dummy sample number.
-        /// </summary>
-        public short DummySampleNum { get; set; } = 0;
-
-        /// <summary>
-        /// Gets or sets the new sample's creator name.
-        /// </summary>
-        public int? CreatorNum { get; set; }
     }
 }

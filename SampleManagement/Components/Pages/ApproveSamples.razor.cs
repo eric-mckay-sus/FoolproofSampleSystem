@@ -16,7 +16,7 @@ using SampleManagement.Components.Common;
 public partial class ApproveSamples : TableManager<Sample>
 {
     private Sample? pendingSample;
-    private DateOnly? expiryDate;
+    private DateOnly? expiryDate = DateOnly.FromDateTime(DateTime.Today.AddYears(1));
     private bool isApproving;
     private string? approvalError;
     private int approverNum;
@@ -89,7 +89,7 @@ public partial class ApproveSamples : TableManager<Sample>
         }
 
         this.pendingSample = sample;
-        this.expiryDate = null;
+        this.expiryDate = DateOnly.FromDateTime(DateTime.Today.AddYears(1));
         this.approvalError = null;
     }
 

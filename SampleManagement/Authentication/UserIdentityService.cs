@@ -86,6 +86,11 @@ public class UserIdentityService(IDbContextFactory<FPSampleDbContext> dbFactory,
                     claims.Add(new Claim(ClaimTypes.Role, "Approver"));
                 }
 
+                if (associate.IsAdmin)
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+                }
+
                 ClaimsIdentity identity = new (claims, "AutoAuth");
                 principal = new (identity);
             }
