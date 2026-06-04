@@ -232,7 +232,7 @@ public abstract class UploadPageBase<T> : TableManager<T>, IDisposable
                     this.ToastService.Notify(new (ToastType.Warning, $"{successMessage} with errors. Check the summary table and log to see what didn't go through."));
                     break;
                 case UploadResult.ErroredOut:
-                    Report? error = this.Reporter.Logs.LastOrDefault(log => log.level == ReportLevel.ERROR) ?? this.Reporter.Logs.LastOrDefault();
+                    Report? error = this.Reporter.Logs.Select(log => log.content).LastOrDefault(log => log.level == ReportLevel.ERROR) ?? this.Reporter.Logs.Select(log => log.content).LastOrDefault();
                     this.ToastService.Notify(new (ToastType.Danger, $"{error?.message ?? "There was an error that prevented your upload from completing"}. Please verify your file."));
                     break;
                 case UploadResult.Canceled:
