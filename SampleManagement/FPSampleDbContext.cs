@@ -312,6 +312,13 @@ public class Associate
     public string? Name { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this associate is authorized to overwrite the MTL database.
+    /// </summary>
+    [Column("isAdmin")]
+    [NotDisplayed]
+    public bool IsAdmin { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether this associate is an authorized FP sample approver.
     /// </summary>
     [Column("isApprover")]

@@ -1,4 +1,5 @@
 ﻿@page "/model-mappings"
+@attribute [Authorize(Roles = "Admin")]
 @inherits UploadPageBase<ModelLine>
 @implements IDisposable
 

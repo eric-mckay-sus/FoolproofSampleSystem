@@ -21,12 +21,16 @@
                 <label>Create Samples</label>
             </NavLink>
         </div>
-        <div class="nav-item">
-            <NavLink class="nav-link" href="model-mappings" Match="NavLinkMatch.All" @onclick="CollapseNavMenu">
-                <Icon Name="IconName.CloudArrowUpFill" />
-                <label>Upload Model <br/>Mappings</label>
-            </NavLink>
-        </div>
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <div class="nav-item">
+                    <NavLink class="nav-link" href="model-mappings" Match="NavLinkMatch.All" @onclick="CollapseNavMenu">
+                        <Icon Name="IconName.CloudArrowUpFill" />
+                        <label>Upload Model <br/>Mappings</label>
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
         <div class="nav-item">
             <NavLink class="nav-link" href="foolproof-sheet" Match="NavLinkMatch.All" @onclick="CollapseNavMenu">
                 <Icon Name="IconName.CloudArrowUp" />
