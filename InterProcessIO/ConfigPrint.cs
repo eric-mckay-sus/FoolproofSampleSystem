@@ -21,8 +21,8 @@ public static partial class Config
     /// </summary>
     public static Dictionary<int, string> DpiToTemplatePath { get; } = new ()
     {
-        [203] = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample203.zpl",
-        [304] = @"C:\LOCAL PROGRAMS\FoolproofSampleSystem\PrintLabel\FpSample304.zpl",
+        [203] = @"P:\PE III\Personal\Eric\Projects\+FoolproofSampleExecutable\FpSample203.zpl",
+        [304] = @"P:\PE III\Personal\Eric\Projects\+FoolproofSampleExecutable\FpSample304.zpl",
     };
 
     /// <summary>

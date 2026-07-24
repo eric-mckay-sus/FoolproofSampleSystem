@@ -232,19 +232,19 @@ public partial class UniversalTable<T>
     }
 
     private void ToggleAttentionItem(T item)
-{
-    // Turn off attention style if on
-    if (this.attentionItem?.Equals(item) == true)
     {
-        this.attentionItem = default;
-    }
+        // Turn off attention style if on
+        if (this.attentionItem?.Equals(item) == true)
+        {
+            this.attentionItem = default;
+        }
 
-    // Turn on attention style if off (automatically revokes from current if one exists)
-    else
-    {
-        this.attentionItem = item;
+        // Turn on attention style if off (automatically revokes from current if one exists)
+        else
+        {
+            this.attentionItem = item;
+        }
     }
-}
 
     private string GetRowClass(T item)
     {

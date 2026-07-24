@@ -6,7 +6,7 @@ namespace UploadFpInfo;
 
 using System.Data;
 using Microsoft.Data.SqlClient;
-using NPOI.SS.UserModel; // for generic spreadsheet manipulation
+using NPOI.SS.UserModel;
 using static Path;
 
 using static NpoiEtlUtilities;

@@ -1,4 +1,8 @@
 {
     "dotnet.server.useOmnisharp": false,
     "csharp.maxProjectFileCountForDiagnosticAnalysis": 1000,
+    "sonarlint.connectedMode.project": {
+        "connectionId": "eric-mckay-sus",
+        "projectKey": "eric-mckay-sus_FoolproofSampleSystem"
+    },
 }

@@ -7,8 +7,7 @@ using System.Data;
 
 /// <summary>
 /// Contains the results of an attempted batch/file parse.
-/// Because structs are passed by value, it's easy to unintentionally clobber good data.
-/// Thus, <see cref="ParseResult"/> is immutable.
+/// The readonly modifier makes this immutable to avoid accidentally clobbering a ParseResult (e.g. by misusing pass-by-value behavior).
 /// </summary>
 public readonly record struct ParseResult(bool hasDuplicate = false, bool hasFormatError = false, bool hasMiscError = false, bool alreadyUploaded = false)
 {
