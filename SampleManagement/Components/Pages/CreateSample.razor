@@ -73,6 +73,20 @@
                                     else
                                     {
                                         <div class="small text-muted mb-2">Select one or more dummy sample numbers to create.</div>
+                                        <div class="form-check border-bottom pb-2 mb-2">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   id="dummy-sample-select-all"
+                                                   checked="@(selectedDummySampleNums.Count > 0 && selectedDummySampleNums.Count == availableSampleNums.Count)"
+                                                   @onchange="args => {
+                                                        bool isSelected = (bool)(args.Value ?? false);
+                                                        foreach (short num in availableSampleNums)
+                                                        {
+                                                            ToggleDummySampleSelection(num, isSelected);
+                                                        }
+                                                    }" />
+                                            <label class="form-check-label" for="dummy-sample-select-all">Select all</label>
+                                        </div>
                                         @foreach (short num in availableSampleNums)
                                         {
                                             <div class="form-check">
