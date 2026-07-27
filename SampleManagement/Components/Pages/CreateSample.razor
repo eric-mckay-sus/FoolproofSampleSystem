@@ -61,23 +61,41 @@
                         <div class="row">
                             <div class="col-md-4">
                                 <label class="form-label">Dummy Sample #</label>
-                                <InputSelect @bind-value="formData.DummySampleNum" class="form-select form-control" disabled=@NotReadyForSampleNum>
-                                    <option value="0">@(NotReadyForSampleNum ? "Please enter valid model and line first" : "-- Select --")</option>
-                                    @foreach (short num in availableSampleNums)
+                                <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                                    @if (NotReadyForSampleNum)
                                     {
-                                        <option value="@num">@num</option>
+                                        <div class="text-muted small">Please enter valid model and line first.</div>
                                     }
-                                </InputSelect>
-                                @if (!NotReadyForSampleNum)
+                                    else if (availableSampleNums.Count == 0)
+                                    {
+                                        <div class="text-muted small">No dummy sample numbers are available for this model.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="small text-muted mb-2">Select one or more dummy sample numbers to create.</div>
+                                        @foreach (short num in availableSampleNums)
+                                        {
+                                            <div class="form-check">
+                                                <input class="form-check-input"
+                                                       type="checkbox"
+                                                       id="@($"dummy-sample-{num}")"
+                                                       checked="@(selectedDummySampleNums.Contains(num))"
+                                                       @onchange="args => ToggleDummySampleSelection(num, (bool)(args.Value ?? false))" />
+                                                <label class="form-check-label" for="@($"dummy-sample-{num}")">@num</label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                                @if (!NotReadyForSampleNum && selectedDummySampleNums.Count > 0)
                                 {
-                                    <ValidationMessage For="@(() => formData.DummySampleNum)" />
+                                    <div class="form-text">Selected: @string.Join(", ", selectedDummySampleNums.OrderBy(num => num))</div>
                                 }
                             </div>
 
                             <div class="col-md-8">
                                 <label class="form-label">Associate Signature</label>
                                 <InputNumber TValue="int?" @bind-value="formData.CreatorNum" class="form-control"
-                                        placeholder=@(NotReadyForSignature ? "Please enter model, line, and dummy sample # first" : "Enter your associate number")
+                                        placeholder=@(NotReadyForSignature ? "Please select one or more dummy sample numbers first" : "Enter your associate number")
                                         disabled=@NotReadyForSignature />
                                 @if (!NotReadyForSignature)
                                 {

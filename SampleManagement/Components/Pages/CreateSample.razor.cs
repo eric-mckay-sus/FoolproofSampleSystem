@@ -51,6 +51,11 @@ public partial class CreateSample : TableManager<Sample>
     private List<short> availableSampleNums = [];
 
     /// <summary>
+    /// The list of dummy sample numbers selected for batch creation.
+    /// </summary>
+    private List<short> selectedDummySampleNums = [];
+
+    /// <summary>
     /// The last model name that was entered in the sample creation card.
     /// </summary>
     private string lastModel = string.Empty;
@@ -136,7 +141,7 @@ public partial class CreateSample : TableManager<Sample>
     /// </summary>
     private bool NotReadyForSignature =>
         this.NotReadyForSampleNum ||
-        this.formData.DummySampleNum < 1;
+        this.selectedDummySampleNums.Count == 0;
 
     /// <summary>
     /// When this page loads, set the sorting information, then let the parent set up.
@@ -277,10 +282,11 @@ public partial class CreateSample : TableManager<Sample>
         }
 
         // Update sample numbers when model is selected
+        bool modelChanged = hasModel && searchModel != this.lastModel;
         if (hasModel)
         {
             // Only hit DB when it's a new model
-            if (searchModel != this.lastModel)
+            if (modelChanged)
             {
                 this.availableSampleNums = await context.FoolproofInfo
                     .Where(f => f.Model == searchModel)
@@ -295,11 +301,13 @@ public partial class CreateSample : TableManager<Sample>
         {
             this.availableSampleNums.Clear();
             this.formData.DummySampleNum = 0;
+            this.selectedDummySampleNums.Clear();
         }
 
         if (this.NotReadyForSampleNum)
         {
             this.formData.DummySampleNum = 0;
+            this.selectedDummySampleNums.Clear();
 
             if (this.editContext != null)
             {
@@ -307,6 +315,18 @@ public partial class CreateSample : TableManager<Sample>
 
                 this.editContext.MarkAsUnmodified(fieldIdentifier);
             }
+        }
+        else if (modelChanged)
+        {
+            this.selectedDummySampleNums.Clear();
+        }
+        else
+        {
+            this.selectedDummySampleNums = this.selectedDummySampleNums
+                .Where(num => this.availableSampleNums.Contains(num))
+                .Distinct()
+                .OrderBy(num => num)
+                .ToList();
         }
 
         if (this.NotReadyForSignature)
@@ -362,6 +382,22 @@ public partial class CreateSample : TableManager<Sample>
         }
     }
 
+    private void ToggleDummySampleSelection(short dummySampleNum, bool isSelected)
+    {
+        if (isSelected)
+        {
+            if (!this.selectedDummySampleNums.Contains(dummySampleNum))
+            {
+                this.selectedDummySampleNums.Add(dummySampleNum);
+                this.selectedDummySampleNums = this.selectedDummySampleNums.OrderBy(num => num).ToList();
+            }
+        }
+        else
+        {
+            this.selectedDummySampleNums.Remove(dummySampleNum);
+        }
+    }
+
     private void TogglePrintMode()
     {
         this.printModeEngaged = !this.printModeEngaged;
@@ -379,6 +415,7 @@ public partial class CreateSample : TableManager<Sample>
         this.isFormExpanded = false;
         this.formData.DummySampleNum = 0;
         this.formData.CreatorNum = null;
+        this.selectedDummySampleNums.Clear();
         this.errorMessage = null;
     }
 
@@ -390,6 +427,14 @@ public partial class CreateSample : TableManager<Sample>
     {
         this.errorMessage = null; // Ensure any error messages are for this submission
 
+        if (this.selectedDummySampleNums.Count == 0)
+        {
+            this.ToastService.Notify(new (ToastType.Danger, "Select at least one dummy sample number before submitting."));
+            return;
+        }
+
+        this.formData.DummySampleNum = this.selectedDummySampleNums[0];
+
         // Force the EditContext to execute all validators, including class attributes
         if (this.editContext == null || !this.editContext.Validate())
         {
@@ -400,16 +445,26 @@ public partial class CreateSample : TableManager<Sample>
         try
         {
             using FPSampleDbContext context = await this.DbFactory.CreateDbContextAsync();
+            List<int> createdIds = [];
 
-            int newId = await CreateSampleAndFetchId(context, this.formData);
+            foreach (short dummySampleNum in this.selectedDummySampleNums.OrderBy(x => x))
+            {
+                this.formData.DummySampleNum = dummySampleNum;
+                int newId = await CreateSampleAndFetchId(context, this.formData);
+                createdIds.Add(newId);
+            }
 
-            this.justCreatedSample = await context.Samples
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.SampleId == newId);
+            this.justCreatedSample = createdIds.Count == 1
+                ? await context.Samples
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.SampleId == createdIds[0])
+                : null;
 
             await this.RefreshData();
             this.CloseForm();
-            this.ToastService.Notify(new (ToastType.Success, "Sample created successfully!"));
+            this.ToastService.Notify(new (ToastType.Success, createdIds.Count == 1
+                ? "Sample created successfully!"
+                : $"Created {createdIds.Count} samples successfully!"));
         }
         catch (Exception ex)
         {
